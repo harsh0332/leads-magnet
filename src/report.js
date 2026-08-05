@@ -19,6 +19,7 @@ const byTier = (t) => leads.filter((l) => l.tier === t);
 const A = byTier('A');
 const B = byTier('B');
 const C = byTier('C');
+const U = byTier('U');
 
 const withPhone = leads.filter((l) => (l.phone ?? '').trim()).length;
 const noWebsite = raw.filter((r) => r.hasWebsite === 'false').length;
@@ -55,6 +56,7 @@ Generated ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
 | **Tier A — call today** | **${A.length}** |
 | Tier B — this week | ${B.length} |
 | Tier C — backlog | ${C.length} |
+| Tier U — unknown demand | ${U.length} |
 
 ---
 
@@ -100,4 +102,4 @@ never reappear on a future call sheet.
 
 fs.writeFileSync(path.join(OUT, 'REPORT.md'), md);
 log(`REPORT.md written → ${path.join(OUT, 'REPORT.md')}`);
-log(`Tier A: ${A.length} · Tier B: ${B.length} · Tier C: ${C.length}`);
+log(`Tier A: ${A.length} · Tier B: ${B.length} · Tier C: ${C.length} · Tier U: ${U.length}`);

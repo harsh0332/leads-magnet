@@ -151,3 +151,75 @@ export function resolveArea({ address, query, city, localities = loadLocalities(
   if (queryArea) return { area: queryArea, areaSource: 'query', queryArea };
   return { area: null, areaSource: 'none', queryArea: null };
 }
+
+/* ------------------------------------------------------------------ */
+/* Adaptive query plan                                                 */
+/* ------------------------------------------------------------------ */
+
+/** Tuning for the per-locality early exit. Documented in AGENTS.md. */
+// Threshold set from measured data, not intuition. The specialist terms
+// (orthodontist, dental surgeon, implant clinic) recover into a 0.17-0.28
+// new-record band AFTER two weak terms, because they surface partly disjoint
+// businesses -- which is why the synonym list exists. A 0.20 floor cut exactly
+// those terms: 43% of queries saved but 19.1% of unique records lost. A 0.10
+// floor sits below the recovery band: 17% saved for 1.3% lost.
+export const ADAPTIVE = Object.freeze({
+  minTerms: 2,            // always run at least this many terms per locality
+  newRatioFloor: 0.10,    // below this, a term counts as "exhausted"
+  consecutiveToStop: 2,   // this many exhausted terms in a row ends the locality
+});
+
+/**
+ * Queries grouped by locality, so a run can stop early on a locality that has
+ * stopped yielding anything new.
+ *
+ * NOTE the ordering inversion. buildQueries() is term-outer/area-inner, which
+ * makes --limit=N a sample of N localities of the first term. A per-locality
+ * early exit needs all terms for one locality adjacent, so this is
+ * area-outer/term-inner and --limit=N caps TOTAL queries across whole
+ * localities. Both are exported; the adaptive scraper path uses this one.
+ *
+ * @returns {{area: string, queries: string[]}[]}
+ */
+export function buildQueryPlan({ city, category, limit = null, configDir = CONFIG_DIR }) {
+  if (!city || !category) {
+    throw new Error('buildQueryPlan: both city and category are required');
+  }
+
+  const localities = readJson(path.join(configDir, 'localities.json'));
+  const categories = readJson(path.join(configDir, 'categories.json'));
+
+  const areas = localities[city];
+  const terms = categories[category];
+
+  if (!areas) throw new Error(`City "${city}" not in config/localities.json — add it first.`);
+  if (!terms) throw new Error(`Category "${category}" not in config/categories.json — add it first.`);
+
+  const plan = [];
+  let budget = limit ?? Infinity;
+
+  for (const area of areas) {
+    if (budget <= 0) break;
+    const queries = terms.slice(0, Math.max(0, budget)).map((t) => `${t} in ${area} ${city}`);
+    if (!queries.length) break;
+    plan.push({ area, queries });
+    budget -= queries.length;
+  }
+  return plan;
+}
+
+/**
+ * Decide whether to keep going in a locality.
+ *
+ * `ratios` is every term's newRecordRatio so far, in order. A term that
+ * returned nothing at all is NOT counted as exhausted — zero results is a
+ * different failure (block, or a thin locality) and the run's empty-query
+ * guard owns it. Treating it as exhaustion would silently truncate a locality
+ * that a transient failure hit.
+ */
+export function shouldStopLocality(ratios, cfg = ADAPTIVE) {
+  if (ratios.length < cfg.minTerms) return false;
+  const tail = ratios.slice(-cfg.consecutiveToStop);
+  if (tail.length < cfg.consecutiveToStop) return false;
+  return tail.every((r) => r !== null && r < cfg.newRatioFloor);
+}

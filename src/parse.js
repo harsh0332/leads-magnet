@@ -572,6 +572,30 @@ export function parseSearchResponseDetailed(rawBody, fieldMap = DEFAULT_FIELD_MA
   }
 
   const containerHit = resolvePath(payload, root.containerPath);
+
+  // A pagination response whose container is explicitly NULL is a legitimate
+  // payload variant meaning "this response carried no records" — Google emits
+  // it when a scroll fetches past the end of the result set. Measured at ~3% of
+  // live queries. Treating it as fatal killed the whole query.
+  //
+  // This degrades ONLY for pagination. On an initial response the container is
+  // always populated, so a null there really does mean the field map is stale,
+  // and staying fatal is the point — that is the loud failure we want.
+  if (
+    framing === 'pagination' &&
+    (containerHit.outcome === 'null-leaf' || containerHit.outcome === 'null-branch')
+  ) {
+    return {
+      framing,
+      containerLength: 0,
+      records: [],
+      skipped: [],
+      warning:
+        `empty-pagination: record container ${JSON.stringify(root.containerPath)} was null ` +
+        `(outcome=${containerHit.outcome}) — response carried no records`,
+    };
+  }
+
   if (containerHit.outcome !== 'value' || !Array.isArray(containerHit.value)) {
     throw new Error(
       `parse: record container ${JSON.stringify(root.containerPath)} did not resolve to an ` +

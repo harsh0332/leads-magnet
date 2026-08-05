@@ -144,6 +144,9 @@ export function emptyProgress() {
   return {
     done: [],
     seenCids: [],
+    // Per-query {area, query, returned, fresh, ratio}. Drives the adaptive
+    // early exit and makes the decision auditable after the fact.
+    telemetry: [],
     stats: { queries: 0, records: 0, written: 0, duplicates: 0, errors: 0, emptyQueries: 0 },
   };
 }

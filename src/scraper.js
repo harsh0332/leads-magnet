@@ -27,7 +27,7 @@ import path from 'path';
 import { URL_TEMPLATE, FEED, DATA_ENDPOINT_MARKER } from './selectors.js';
 import { args, sleep, jitter, log } from './utils.js';
 import { parseSearchResponseDetailed } from './parse.js';
-import { buildQueries, resolveArea } from './query-matrix.js';
+import { buildQueries, buildQueryPlan, shouldStopLocality, ADAPTIVE, resolveArea } from './query-matrix.js';
 import {
   resolveRunId, openRun, appendRecord, loadProgress, saveProgress,
   logError, summarize, printSummary,
@@ -41,6 +41,7 @@ const CFG = {
   maxScrolls: Number(args.maxScrolls ?? 25),
   headless: args.headless === 'true',
   dryRun: args['dry-run'] === 'true' || args.dryRun === 'true',
+  adaptive: args['no-adaptive'] !== 'true',
   runId: args.run ?? null,
 
   // Anti-blocking budget. Do not reduce these. If a run is rate limited the
@@ -61,13 +62,20 @@ const FIXTURE_DIR = path.join('fixtures', 'raw');
  * Returns counts. Pure except for the CSV append, which is the point.
  */
 function ingestBody(body, { handle, query, city, seen, progress, collected }) {
-  const { framing, records, skipped } = parseSearchResponseDetailed(body);
+  const { framing, records, skipped, warning } = parseSearchResponseDetailed(body);
 
   let written = 0;
   let duplicates = 0;
 
   for (const place of records) {
-    if (seen.has(place.cid)) { duplicates += 1; continue; }
+    // Every copy is written. The two framings carry DIFFERENT fields — initial
+    // omits reviewCount entirely, pagination carries it — so discarding a
+    // repeat copy throws away the only source of some fields. score.js merges
+    // by cid, field by field, preferring the first non-null value.
+    // `duplicates` still counts repeats so the run log stays honest about how
+    // much overlap the query matrix is producing.
+    const repeat = seen.has(place.cid);
+    if (repeat) duplicates += 1;
     seen.add(place.cid);
     // Area is derived from the business's OWN address, not from the query.
     // Google bleeds results across locality boundaries, so the query locality
@@ -84,7 +92,7 @@ function ingestBody(body, { handle, query, city, seen, progress, collected }) {
   progress.stats.written += written;
   progress.stats.duplicates += duplicates;
 
-  return { framing, total: records.length, written, duplicates, skipped: skipped.length };
+  return { framing, total: records.length, written, duplicates, skipped: skipped.length, warning };
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,12 +192,17 @@ async function scrollAndCollect(page, bodies) {
 async function runLive(handle, progress, collected) {
   const { chromium } = await import('playwright');
 
-  const queries = buildQueries({
+  const plan = buildQueryPlan({
     city: CFG.city, category: CFG.category, limit: CFG.limit,
   });
+  const planned = plan.reduce((n, g) => n + g.queries.length, 0);
 
   const seen = new Set(progress.seenCids);
-  log(`${queries.length} queries planned · ${progress.done.length} already done`);
+  log(`${planned} queries planned across ${plan.length} localities · ${progress.done.length} already done`);
+  log(CFG.adaptive
+    ? `Adaptive: stop a locality after ${ADAPTIVE.consecutiveToStop} consecutive terms under ` +
+      `${ADAPTIVE.newRatioFloor} new-record ratio (minimum ${ADAPTIVE.minTerms} terms)`
+    : 'Adaptive: DISABLED (--no-adaptive) — running every term in every locality');
 
   let browser;
   try {
@@ -205,8 +218,31 @@ async function runLive(handle, progress, collected) {
 
     let emptyStreak = 0;
 
-    for (const query of queries) {
-      if (progress.done.includes(query)) continue;
+    let skippedQueries = 0;
+
+    for (const group of plan) {
+      const ratios = [];
+      let localityUnique = 0;
+      let termsRun = 0;
+
+      for (let ti = 0; ti < group.queries.length; ti += 1) {
+        const query = group.queries[ti];
+
+        if (CFG.adaptive && shouldStopLocality(ratios)) {
+          const remaining = group.queries.length - ti;
+          skippedQueries += remaining;
+          log(`  ↷ ${group.area}: skipping ${remaining} remaining term(s) — ` +
+              `last ${ADAPTIVE.consecutiveToStop} ratios ${ratios.slice(-ADAPTIVE.consecutiveToStop)
+                .map((r) => r === null ? 'n/a' : r.toFixed(2)).join(', ')} below ${ADAPTIVE.newRatioFloor}`);
+          break;
+        }
+
+        if (progress.done.includes(query)) continue;
+
+      // Hoisted above the try: the telemetry block after the catch reads these,
+      // and a query that throws must still record an honest ratio.
+      let queryRecords = 0;
+      let queryNew = 0;
 
       const bodies = [];
       // Listener registered BEFORE navigation — the initial payload lands
@@ -232,15 +268,18 @@ async function runLive(handle, progress, collected) {
         await scrollAndCollect(page, bodies);
 
         const settled = await Promise.all(bodies);
-        let queryRecords = 0;
 
-        for (const r of settled) {
+        for (const [idx, r] of settled.entries()) {
           if (!r.ok) { progress.stats.errors += 1; logError(handle, query, r.err); continue; }
           try {
             const out = ingestBody(r.body, {
               handle, query, city: CFG.city ?? null, seen, progress, collected,
             });
             queryRecords += out.total;
+            queryNew += out.written;
+            // Not an error: an empty pagination response is normal past the end
+            // of a result set. Logged at warn level so it stays visible.
+            if (out.warning) log(`  ⚠ ${query} [response ${idx}] — ${out.warning}`);
           } catch (e) {
             progress.stats.errors += 1;
             logError(handle, query, e);
@@ -280,12 +319,33 @@ async function runLive(handle, progress, collected) {
         page.off('response', onResponse);
       }
 
-      progress.done.push(query);
-      progress.seenCids = [...seen];
-      progress.stats.queries += 1;
-      saveProgress(handle, progress);
+        // newRecordRatio drives the early exit. A query that returned NOTHING
+        // records null, not 0 — zero results is a block or a thin locality,
+        // owned by the empty-query guard, and counting it as exhaustion would
+        // silently truncate a locality a transient failure happened to hit.
+        const ratio = queryRecords > 0 ? queryNew / queryRecords : null;
+        ratios.push(ratio);
+        termsRun += 1;
+        localityUnique += queryNew;
+        progress.telemetry.push({
+          area: group.area, query, returned: queryRecords, fresh: queryNew, ratio,
+        });
 
-      await sleep(jitter(...CFG.queryDelay));
+        progress.done.push(query);
+        progress.seenCids = [...seen];
+        progress.stats.queries += 1;
+        saveProgress(handle, progress);
+
+        await sleep(jitter(...CFG.queryDelay));
+      }
+
+      log(`  ${group.area}: ${termsRun} term(s) run, ` +
+          `${group.queries.length - termsRun} skipped, ${localityUnique} unique records`);
+    }
+
+    if (CFG.adaptive) {
+      log(`\nAdaptive saved ${skippedQueries} of ${planned} planned queries ` +
+          `(${planned ? (skippedQueries / planned * 100).toFixed(1) : '0.0'}%)`);
     }
   } finally {
     // Closed on the error path too, not just the success path. The previous

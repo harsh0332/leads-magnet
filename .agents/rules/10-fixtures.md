@@ -57,6 +57,39 @@ counterexamples. A run that reads only the initial response produces a constant
 demand score and an unreachable Tier A, which is the original S1-1 defect by a
 new route. The scraper must keep pagination responses.
 
+## Fixtures must match the traffic shape of a live run
+
+A fixture corpus is not just a sample of *payloads*. It is a sample of the
+*traffic pattern* that produces them, and if the pattern differs the corpus
+tests a different system than the one that ships.
+
+The first capture took **one scroll per query**. A live run scrolls repeatedly
+(`maxScrolls`, exiting after two idle scrolls), and Google re-sends earlier
+records in later responses. The consequences were measurable:
+
+| | fixtures v1 | live run |
+|---|---|---|
+| distinct cids | 137 | 342 |
+| in **both** framings | 16 | 44 |
+| **initial-only** | 64 (47%) | 16 (5%) |
+| pagination-only | 57 | 282 |
+| `reviewCount` null | 50.4% | 5.0% |
+
+`reviewCount` exists only in pagination responses, so an initial-only record can
+never carry one. With 47% of the corpus initial-only, `--dry-run` produced
+Tier A = 0 while the identical code produced Tier A = 11 live.
+
+**That is the failure mode to avoid: the regression harness could not detect a
+Tier A regression, because Tier A was structurally zero in it.** A harness that
+cannot fail on the bug you are trying to prevent is decoration.
+
+So: **capture with the same scroll loop, the same `maxScrolls`, and the same
+delays the live scraper uses.** When the scraper's traffic pattern changes, the
+capture script changes with it, and the corpus is re-captured.
+
+Superseded corpora are kept (`fixtures/raw-v1/`) rather than deleted, so a
+"did this change behaviour or did the corpus change?" question stays answerable.
+
 ## Field map entries carry their own evidence
 
 Every entry records `path`, `type`, `derivedFrom` (the fixture), `derivedOn`,
