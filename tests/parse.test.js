@@ -710,3 +710,38 @@ test('a real fixture still reports no empty-pagination warning', () => {
     assert.ok(out.records.length > 0, `${file} produced no records`);
   }
 });
+
+/* ================================================================== */
+/* SUITE INTEGRITY                                                     */
+/* ================================================================== */
+
+/**
+ * A green suite that runs FEWER tests than it used to is a regression, not a
+ * pass. Three tests were once silently deleted during a rewrite and the suite
+ * reported "39/39 green" — which reads as success and is not. Only a manual
+ * count caught it.
+ *
+ * Raise EXPECTED_TEST_COUNT deliberately when you add tests. If this fails
+ * after a refactor you did not intend to change coverage, tests were lost.
+ */
+const EXPECTED_TEST_COUNT = 53;
+
+test('the suite still declares every test it is supposed to', () => {
+  // Counts declarations across EVERY test file, not just this one — a new file
+  // would otherwise be unguarded, which is the same hole one level up.
+  const dir = path.join(ROOT, 'tests');
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort();
+  const perFile = files.map((f) => {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    return { f, n: (src.match(/^test\(/gm) ?? []).length };
+  });
+  const declared = perFile.reduce((a, x) => a + x.n, 0);
+
+  assert.equal(
+    declared, EXPECTED_TEST_COUNT,
+    `suite declares ${declared} tests but EXPECTED_TEST_COUNT is ${EXPECTED_TEST_COUNT}.\n` +
+    perFile.map((x) => `  ${x.f}: ${x.n}`).join('\n') +
+    '\nIf you added tests, raise the constant deliberately. If you did not, tests were LOST — ' +
+    'a green run with fewer tests is a regression, not a pass.'
+  );
+});

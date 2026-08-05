@@ -2,13 +2,14 @@
   "name": "lead-engine",
   "version": "1.0.0",
   "type": "module",
-  "description": "Google Maps lead engine — finds local businesses with weak digital presence",
+  "description": "Google Maps lead engine \u2014 finds local businesses with weak digital presence",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "scrape": "node src/scraper.js",
     "score": "node src/score.js",
     "report": "node src/report.js",
-    "pipeline": "node src/pipeline.js"
+    "pipeline": "node src/pipeline.js",
+    "blacklist": "node src/blacklist.js"
   },
   "dependencies": {
     "playwright": "^1.48.0"

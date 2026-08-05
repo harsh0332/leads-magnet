@@ -28,6 +28,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { args, readCsv, writeCsv, log } from './utils.js';
+import { loadBlacklist } from './blacklist.js';
 
 /* ------------------------------------------------------------------ */
 /* Weights — base values live in .agents/rules/20-scoring.md           */
@@ -330,7 +331,7 @@ export function scoreRow(row, W, ctx = {}) {
   let tier = 'X';
   if (!demandKnown) tier = phone ? 'U' : 'X';
   else if (likelyEnterprise) tier = 'C';
-  else if (gap >= 50 && demand >= 75 && phone) tier = 'A';
+  else if (gap >= 40 && demand >= 75 && phone) tier = 'A';
   else if (gap >= 40 && demand >= 30 && phone) tier = 'B';
   else if (gap >= 30 && phone) tier = 'C';
 
@@ -348,11 +349,11 @@ export function scoreRow(row, W, ctx = {}) {
 /* Main                                                                */
 /* ------------------------------------------------------------------ */
 
-function loadBlacklist() {
-  const file = path.join('config', 'blacklist.json');
-  if (!fs.existsSync(file)) return new Set();
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  return new Set(Array.isArray(parsed) ? parsed : (parsed.cids ?? []));
+// Single source of truth for the blacklist shape — src/blacklist.js owns it.
+// A local re-implementation would drift and silently stop excluding people the
+// operator has already called.
+function loadBlacklistCids() {
+  return loadBlacklist().cids;
 }
 
 function mappedFieldsFromMap() {
@@ -360,6 +361,14 @@ function mappedFieldsFromMap() {
   const map = JSON.parse(fs.readFileSync(file, 'utf8'));
   return new Set(Object.keys(map.fields ?? {}));
 }
+
+/** tier-a.csv = leads.csv plus a blank `outcome` the operator fills in. */
+export const TIER_A_HEADERS = Object.freeze([
+  'outcome',
+  'tier', 'name', 'phone', 'area', 'areaSource', 'queryArea', 'category', 'rating', 'reviewCount',
+  'gapReasons', 'gapScore', 'demandScore', 'website', 'address',
+  'lat', 'lng', 'cid', 'placeId',
+]);
 
 export const LEAD_HEADERS = Object.freeze([
   'tier', 'name', 'phone', 'area', 'areaSource', 'queryArea', 'category', 'rating', 'reviewCount',
@@ -389,7 +398,7 @@ function main() {
     genericCategories: categories._genericCategories ?? {},
   };
 
-  const blacklist = loadBlacklist();
+  const blacklist = loadBlacklistCids();
 
   // Dedupe by cid ONLY.
   //
@@ -446,7 +455,15 @@ function main() {
     );
 
   writeCsv(path.join(OUT, 'leads.csv'), LEAD_HEADERS, scored);
-  writeCsv(path.join(OUT, 'tier-a.csv'), LEAD_HEADERS, scored.filter((r) => r.tier === 'A'));
+
+  // tier-a.csv carries an empty `outcome` column for the operator to fill in by
+  // hand while calling. `npm run blacklist -- --import=<file>` reads it back and
+  // blacklists every annotated row, so a called business never resurfaces.
+  writeCsv(
+    path.join(OUT, 'tier-a.csv'),
+    TIER_A_HEADERS,
+    scored.filter((r) => r.tier === 'A').map((r) => ({ ...r, outcome: '' }))
+  );
 
   const counts = scored.reduce((a, r) => ({ ...a, [r.tier]: (a[r.tier] ?? 0) + 1 }), {});
   log(`Scored ${scored.length} of ${raw.length} raw rows (${blacklisted} blacklisted)`);
