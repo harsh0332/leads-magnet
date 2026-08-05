@@ -25,9 +25,11 @@ const withPhone = leads.filter((l) => (l.phone ?? '').trim()).length;
 const noWebsite = raw.filter((r) => r.hasWebsite === 'false').length;
 const social = raw.filter((r) => r.isSocialOnly === 'true').length;
 
-// tier-a.csv is today's call list. Written here too so REPORT.md and the CSV
-// can never disagree about what Tier A contains.
-writeCsv(path.join(OUT, 'tier-a.csv'), LEAD_HEADERS, A);
+// tier-a.csv is deliberately NOT written here. score.js owns it, because it is
+// the ONE artifact the operator edits by hand — it ships with a blank `outcome`
+// column that `npm run blacklist -- --import=` reads back. Rewriting it from
+// leads.csv on every report run would silently erase those annotations, which
+// is exactly the kind of quiet data loss this codebase exists to avoid.
 
 const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
 

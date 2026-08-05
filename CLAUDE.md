@@ -76,7 +76,8 @@ computed **once** and passed down. Never recompute it in a second process.
   around it.
 
 Additionally: never commit scraped personal data (`output/` and `fixtures/` are
-gitignored), and never install a proxy or stealth dependency without asking.
+gitignored; this repo is public), and never install a proxy or stealth
+dependency without asking.
 
 ## Silent failure is the enemy
 
@@ -94,28 +95,31 @@ detected. All three shipped in committed output and none was noticed. So:
    numeric field with zero variance, fails the run.
 5. Never write a rule in a Markdown file and assume the code obeys it. If a
    constraint matters, it needs a test.
+6. **Every test report states the TOTAL count and the PASS count** — "43 tests,
+   43 pass, 0 fail", never "all green" or a bare pass rate. A suite that
+   silently runs fewer tests reads as success: three tests were once deleted
+   during a rewrite and the run reported "39/39 green". `tests/parse.test.js`
+   asserts its own declared test count for this reason; raise that constant
+   deliberately when adding tests.
 
 ## Field map discipline
 
 `config/field-map.json` is the single source of truth for where each field
 lives in the payload. Nowhere else.
 
-- Every entry records: the path, the fixture it was derived from, the date, and
-  a sample value observed at that path. An index without a recorded fixture is
-  not allowed to exist — if you cannot cite the fixture, you guessed.
-- When a path stops matching, re-capture and re-run discovery. Do not patch the
-  parser to compensate for a stale map.
-- Paths are validated against every fixture in `fixtures/` before use. A path
-  that resolves in one fixture and not another is a bug in the path.
+- Every entry records the path, the fixture it came from, the date, and a sample
+  value. If you cannot cite the fixture, you guessed.
+- When a path stops matching, re-capture and re-run discovery. Never patch the
+  parser around a stale map. A path that resolves in one fixture and not another
+  is a bug in the path.
 
 ## Parser discipline
 
-- Pure functions only. `parse(payload) -> record`. No `fetch`, no `page`, no
-  `fs`, no `Date.now()`, no randomness. One function per non-trivial field.
-- A parser must never catch an error and return a default. Let it throw, or
-  return an explicit `{ value: null, reason: '...' }`.
-- No regex over a whole document body. Scope every match to the specific
-  payload node it belongs to.
+- Pure functions only. `parse(payload) -> record`. No `fetch`, `page`, `fs`,
+  `Date.now()`, or randomness. One function per non-trivial field.
+- Never catch an error and return a default. Throw, or return an explicit
+  `{ value: null, reason: '...' }`.
+- No regex over a whole document body — scope every match to its payload node.
 
 ## Anti-blocking budget
 
@@ -129,7 +133,6 @@ Do not change these numbers.
 
 If a run is being rate limited, the fix is longer delays or fewer queries. It is
 never a proxy, and it is never a workaround.
-
 ## Scoring
 
 Weights and rationale live in `.agents/rules/20-scoring.md`. Change that file
@@ -140,14 +143,13 @@ much business they already do). Do not collapse them into one number.
 
 ## Config is the knowledge base
 
-- `config/localities.json` — city → neighbourhood list. This is what breaks the
-  ~120-results-per-search ceiling.
-- `config/categories.json` — category → search-term synonyms.
+- `config/localities.json` — city → neighbourhood list; breaks the
+  ~120-results-per-search ceiling and derives `area` from a business address.
+- `config/categories.json` — search-term synonyms + `_genericCategories`.
 
 When the operator names a city or category not present, **add it to the config
 file** as part of the task, and say what you added. Never hardcode a city name
 into `src/`.
-
 ## Subagents
 
 Defined in `.claude/agents/`. Each has an explicit prohibition list — respect it.
@@ -159,7 +161,6 @@ Defined in `.claude/agents/`. Each has an explicit prohibition list — respect 
 | `parser` | Writes pure parsing functions against the field map | No |
 | `harness` | Writes the test suite; adversarial toward the parser | No |
 | `auditor` | Reviews finished work for silent-failure modes | No |
-
 ## Language
 
 The operator writes in Hinglish. Reply in Hinglish for conversation. Keep all
@@ -167,9 +168,9 @@ The operator writes in Hinglish. Reply in Hinglish for conversation. Keep all
 
 ## Quota awareness
 
-The operator is on a rate-limited tier. Don't re-read files already in context,
-don't open a browser unless a fixture is genuinely stale, batch your questions,
-and when a run will take hours say so up front and let it run in the terminal.
+Rate-limited tier. Don't re-read files already in context, don't open a browser
+unless a fixture is genuinely stale, batch questions, and say up front when a
+run will take hours.
 
 ## Reporting style
 

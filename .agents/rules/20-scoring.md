@@ -162,7 +162,7 @@ with an existing agency — flag `likelyEnterprise: true` and drop to Tier C.
 
 | Tier | Condition | Meaning |
 |---|---|---|
-| **A** | gap ≥ 50 AND demand ≥ 75 AND has phone | Call today |
+| **A** | gap ≥ 40 AND demand ≥ 75 AND has phone | Call today |
 | **B** | gap ≥ 40 AND demand ≥ 30 AND has phone | Call this week |
 | **C** | gap ≥ 30 AND has phone | Backlog |
 | **U** | reviewCount never observed AND has phone | Unknown demand — reported separately |
@@ -200,6 +200,44 @@ versa. `raw.csv` keeps every copy; the merge happens at scoring time, so the raw
 file stays an honest record of what was actually returned.
 
 Sort within tier by `demand` descending — biggest business first.
+
+### STANDING RULE — recalibrate floors whenever the signal set changes
+
+A tier floor is a fraction of an achievable maximum, not an absolute. Change the
+signal set and the maximum moves underneath the floor, silently changing what
+the tier means. **This has now caused the same failure twice**, so it is a rule
+rather than a note:
+
+> Whenever a gap signal is added, removed, or reweighted, re-derive the tier
+> floors against the new achievable maximum in the same change. State the new
+> maximum and what fraction of it each floor represents.
+
+Occurrence 1: three signals went unmapped, the observable maximum fell, and
+`noWebsite` alone cleared the old gap ≥ 50 floor — so gap stopped discriminating
+and Tier A ballooned to 93 on a 454-record run.
+
+Occurrence 2: the reverse. `nameStuffed` and `badCategory` were added and three
+signals were mapped, but the gap ≥ 50 floor stayed. With `noWebsite` and
+`socialOnly` both worth exactly 40, a floor of 50 made a **second signal
+mandatory** — so Tier A silently began selecting for *listing hygiene problems*
+rather than *needs a website*, which inverts what this tool is for. A
+509-review dentist with only an Instagram page sat in Tier B.
+
+### Tier A gap floor lowered 50 → 40 (2026-08-06)
+
+The realistic gap ceiling is about 75, not 100: `noWebsite` and `socialOnly` are
+mutually exclusive at 40, and the remaining signals a *busy, well-run* business
+can plausibly carry are `nameStuffed` (20) and `badCategory` (15). The
+unclaimed/noHours/noPhotos signals are strongly anti-correlated with high review
+counts — a business with 500 reviews is claimed, has hours, and has photos.
+
+So a floor of 50 against a realistic 75 ceiling demanded two signals. At 40 the
+core pitch — **no website, or social-only, on a business with real footfall** —
+qualifies on its own, and `nameStuffed` / `badCategory` become bonus signals
+that pull a *less* busy business up rather than prerequisites.
+
+**Demand does the selectivity.** The demand ≥ 75 floor (75+ reviews) is
+unchanged and is what keeps Tier A small.
 
 ### Tier A demand floor raised 55 → 75 (2026-08-05)
 
