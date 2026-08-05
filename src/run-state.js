@@ -79,11 +79,18 @@ export function openRun({ runId, outDir = 'output' }) {
  * blank on every row and listed there. Writing `false` for them would be a lie
  * the scorer would act on.
  */
+// Every gap signal scoring reads MUST have a column here. A field that is
+// mapped in config/field-map.json but missing from this list is the worst of
+// both worlds: resolveWeights() sees it as available and stops rescaling, while
+// scoreRow() never receives it and the signal silently never fires. That
+// combination cost the whole of Tier A once — keep this list in step with
+// SIGNAL_REQUIRES in score.js.
 export const RAW_HEADERS = Object.freeze([
   'query', 'framing', 'cid', 'placeId', 'name', 'category',
   'rating', 'reviewCount', 'phone', 'website', 'hasWebsite', 'isSocialOnly',
   'address', 'area', 'lat', 'lng',
-  'isUnclaimed', 'permanentlyClosed', 'unmappedFields',
+  'isUnclaimed', 'hasHours', 'photoCount', 'hasPhotos',
+  'permanentlyClosed', 'unmappedFields',
 ]);
 
 /** Fields whose value came from the caller, not the payload. */

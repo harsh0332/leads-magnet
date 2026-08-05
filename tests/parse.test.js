@@ -32,6 +32,7 @@ import {
   nullRateTable,
   DEFAULT_FIELD_MAP,
   FIELD_STATE,
+  FIELD_BINDINGS,
 } from '../src/parse.js';
 
 /* ------------------------------------------------------------------ */
@@ -497,14 +498,36 @@ test('every Place carries the full contract shape', () => {
 });
 
 test('unmapped fields are distinguishable from genuinely absent ones', () => {
-  // area / isUnclaimed / permanentlyClosed have no path in the field map.
-  // They must read as "we never looked", not as "the business has none".
+  // A field with no path in the field map must read as "we never looked",
+  // never as "the business has none".
+  //
+  // The unmapped set is DERIVED from the field map rather than hardcoded. It
+  // used to name area/isUnclaimed/permanentlyClosed literally, and went stale
+  // the moment `discover` mapped isUnclaimed — the test failed while the code
+  // was correct. Deriving it means this assertion keeps its teeth as fields
+  // get mapped, instead of having to be edited (and weakened) each time.
+  const mapped = new Set(Object.keys(DEFAULT_FIELD_MAP.fields ?? {}));
+  const unmappedKeys = Object.entries(FIELD_BINDINGS)
+    .filter(([, mapName]) => !mapped.has(mapName))
+    .map(([placeKey]) => placeKey);
+
+  assert.ok(unmappedKeys.length > 0, 'expected at least one still-unmapped field to assert on');
+
   for (const r of ALL.slice(0, 40)) {
-    for (const k of ['area', 'isUnclaimed', 'permanentlyClosed']) {
+    for (const k of unmappedKeys) {
       assert.equal(r[k], null, `${k} should be null while unmapped`);
       assert.equal(
         r._meta.fields[k].state, FIELD_STATE.UNMAPPED,
         `${k} state is "${r._meta.fields[k].state}" — unmapped must not masquerade as absent`
+      );
+    }
+    // The converse, which is the part that actually guards against regression:
+    // a MAPPED field must never report itself as unmapped.
+    for (const [placeKey, mapName] of Object.entries(FIELD_BINDINGS)) {
+      if (!mapped.has(mapName)) continue;
+      assert.notEqual(
+        r._meta.fields[placeKey].state, FIELD_STATE.UNMAPPED,
+        `${placeKey} is mapped to "${mapName}" but reports unmapped`
       );
     }
   }

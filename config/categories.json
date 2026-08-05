@@ -1,62 +1,179 @@
 {
   "_note": "Search-term synonyms. Each term x each locality = one query. Keep 4-8 terms per category. Agent: add new categories here.",
-
   "dentist": [
-    "dentist", "dental clinic", "dental hospital",
-    "orthodontist", "dental surgeon", "dental implant clinic"
+    "dentist",
+    "dental clinic",
+    "dental hospital",
+    "orthodontist",
+    "dental surgeon",
+    "dental implant clinic"
   ],
-
   "interior designer": [
-    "interior designer", "interior decorator", "modular kitchen",
-    "home interior", "furniture designer", "false ceiling contractor"
+    "interior designer",
+    "interior decorator",
+    "modular kitchen",
+    "home interior",
+    "furniture designer",
+    "false ceiling contractor"
   ],
-
   "doctor": [
-    "clinic", "physician", "general physician",
-    "polyclinic", "specialist doctor"
+    "clinic",
+    "physician",
+    "general physician",
+    "polyclinic",
+    "specialist doctor"
   ],
-
   "gym": [
-    "gym", "fitness centre", "health club",
-    "crossfit", "yoga studio", "personal trainer"
+    "gym",
+    "fitness centre",
+    "health club",
+    "crossfit",
+    "yoga studio",
+    "personal trainer"
   ],
-
   "salon": [
-    "beauty parlour", "salon", "unisex salon",
-    "hair salon", "spa", "makeup artist"
+    "beauty parlour",
+    "salon",
+    "unisex salon",
+    "hair salon",
+    "spa",
+    "makeup artist"
   ],
-
   "restaurant": [
-    "restaurant", "cafe", "family restaurant",
-    "pure veg restaurant", "banquet hall"
+    "restaurant",
+    "cafe",
+    "family restaurant",
+    "pure veg restaurant",
+    "banquet hall"
   ],
-
   "coaching": [
-    "coaching classes", "tuition centre", "institute",
-    "competitive exam coaching", "computer institute"
+    "coaching classes",
+    "tuition centre",
+    "institute",
+    "competitive exam coaching",
+    "computer institute"
   ],
-
   "real estate": [
-    "real estate agent", "property dealer", "builder",
-    "property consultant", "estate agency"
+    "real estate agent",
+    "property dealer",
+    "builder",
+    "property consultant",
+    "estate agency"
   ],
-
   "factory": [
-    "manufacturer", "factory", "industrial unit",
-    "fabrication works", "packaging manufacturer", "engineering works"
+    "manufacturer",
+    "factory",
+    "industrial unit",
+    "fabrication works",
+    "packaging manufacturer",
+    "engineering works"
   ],
-
   "boutique": [
-    "boutique", "designer boutique", "ladies tailor",
-    "bridal wear", "saree shop"
+    "boutique",
+    "designer boutique",
+    "ladies tailor",
+    "bridal wear",
+    "saree shop"
   ],
-
   "veterinary": [
-    "veterinary clinic", "pet clinic", "animal hospital", "pet shop"
+    "veterinary clinic",
+    "pet clinic",
+    "animal hospital",
+    "pet shop"
   ],
-
   "chartered accountant": [
-    "chartered accountant", "CA firm", "tax consultant",
-    "GST consultant", "accounting services"
-  ]
+    "chartered accountant",
+    "CA firm",
+    "tax consultant",
+    "GST consultant",
+    "accounting services"
+  ],
+  "_genericCategories": {
+    "_note": "Categories that are GENERIC relative to that trade — not wrong in general. A dentist filed under 'Medical clinic' loses the 'dentist near me' pack. Drives the badCategory gap signal; see .agents/rules/20-scoring.md.",
+    "dentist": [
+      "Doctor",
+      "Hospital",
+      "Medical clinic",
+      "Medical Center",
+      "Diagnostic center",
+      "Child health care center",
+      "Association / Organization",
+      "Health consultant"
+    ],
+    "interior designer": [
+      "Architect",
+      "Contractor",
+      "General contractor",
+      "Construction company",
+      "Corporate office",
+      "Association / Organization",
+      "Business to business service"
+    ],
+    "doctor": [
+      "Hospital",
+      "Corporate office",
+      "Association / Organization",
+      "Medical Center"
+    ],
+    "gym": [
+      "Wellness center",
+      "Wellness program",
+      "Sports complex",
+      "Recreation center",
+      "Corporate office",
+      "Association / Organization"
+    ],
+    "salon": [
+      "Beauty product supplier",
+      "Corporate office",
+      "Association / Organization",
+      "Shopping mall"
+    ],
+    "restaurant": [
+      "Corporate office",
+      "Association / Organization",
+      "Banquet hall",
+      "Event venue"
+    ],
+    "coaching": [
+      "School",
+      "Corporate office",
+      "Association / Organization",
+      "Educational consultant"
+    ],
+    "real estate": [
+      "Corporate office",
+      "Association / Organization",
+      "Business to business service",
+      "Contractor"
+    ],
+    "factory": [
+      "Corporate office",
+      "Association / Organization",
+      "Business to business service",
+      "Wholesaler"
+    ],
+    "boutique": [
+      "Corporate office",
+      "Association / Organization",
+      "Shopping mall",
+      "Clothing store"
+    ],
+    "veterinary": [
+      "Doctor",
+      "Hospital",
+      "Medical clinic",
+      "Corporate office",
+      "Association / Organization"
+    ],
+    "chartered accountant": [
+      "Corporate office",
+      "Financial consultant",
+      "Association / Organization",
+      "Tax attorney",
+      "Business management consultant",
+      "Consultant",
+      "Legal services"
+    ]
+  }
 }

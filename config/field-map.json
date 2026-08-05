@@ -817,7 +817,241 @@
           "sample": "ChZDSUhNMG9nS0VJQ0FnSUR2c2FQa2NREAE"
         }
       ]
+    },
+    "isUnclaimed": {
+      "path": [
+        49,
+        0
+      ],
+      "type": "booleanByPresence",
+      "presenceMeans": true,
+      "derivedFrom": "fixtures/raw/007-chartered-accountant-in-freeganj-ujjain-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "https://business.google.com/create?fp=<cid-decimal>&...&gmbsrc=...%7Cclaimbz%7Cu&ppsrc=GMBMI...  [redacted]",
+      "sampleEvidence": "[49,1] === \"Claim this business\" (1 distinct value, 28/28 occurrences)",
+      "confidence": 0.99,
+      "confirmedIn": 5,
+      "observedAbsentInFixtures": 3,
+      "nullRate": 0,
+      "resolutionRate": 1,
+      "positiveRate": 0.183,
+      "distinctValues": 2,
+      "coverageByFraming": {
+        "initial": {
+          "present": 17,
+          "total": 80,
+          "coverage": 0.2125
+        },
+        "pagination": {
+          "present": 11,
+          "total": 73,
+          "coverage": 0.1507
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            226,
+            0
+          ],
+          "sample": "https://business.google.com/local/business/setup/create?fp=<cid-decimal>...  [redacted]",
+          "note": "Agrees with [49,0] on exactly the same 28 records."
+        },
+        {
+          "path": [
+            226,
+            6
+          ],
+          "sample": 1,
+          "note": "Integer 1 on exactly those 28 records, absent on the other 125."
+        },
+        {
+          "path": [
+            49,
+            1
+          ],
+          "sample": "Claim this business",
+          "note": "Human-readable CTA label. This is the evidence the path is what it claims to be."
+        }
+      ],
+      "runnersUp": [],
+      "booleanByPresence": true,
+      "absenceIsExpected": true,
+      "validation": [
+        "Label: [49,1] holds exactly one distinct string across all 28 positives — \"Claim this business\". Google renders this CTA only on listings with no verified owner.",
+        "Ownership: the URL's fp= query parameter equals this record's own CID (low half of [10], hex->decimal) for 28/28 positives. The node belongs to THIS record, not to the [37]-style sibling business.",
+        "Redundancy: [226,0] and [226,6] flag the identical 28 records independently.",
+        "Stability: 16/16 businesses that appear in more than one fixture agree on this flag across both framings.",
+        "Behaviour: positives have a website 2/28 (7%) vs 61/125 (49%) for negatives, and a phone 12/28 (43%) vs 112/125 (90%). That is the expected profile of an unverified listing."
+      ],
+      "notes": "BOOLEAN-BY-PRESENCE. resolutionRate is 1.0 — every record decides to true or false. Do NOT wire positiveRate (0.183) into the >30%-null failure gate; nullRate for this field is 0. A 100% or 0% positive rate WOULD be the signature of a wrong path. Caveat: no positive was observed in the interior-designer corpus (fixtures 003/004, 40 records, 0 positives); positives come from 5 fixtures across 3 of the 4 captured categories.",
+      "sampleRedacted": true
+    },
+    "hours": {
+      "path": [
+        203,
+        0
+      ],
+      "type": "array",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": [
+        [
+          "Wednesday",
+          3,
+          [
+            2026,
+            8,
+            5
+          ],
+          [
+            [
+              "10 am–9 pm",
+              [
+                [
+                  10
+                ],
+                [
+                  21
+                ]
+              ]
+            ]
+          ],
+          0,
+          1
+        ]
+      ],
+      "sampleShape": "[dayName, dayOfWeek(1=Mon..7=Sun), [year,month,day], [[humanLabel, [[openHour,openMin?],[closeHour,closeMin?]]], ...], ...]",
+      "confidence": 0.9542,
+      "confirmedIn": 8,
+      "nullRate": 0.0458,
+      "distinctValues": 94,
+      "coverageByFraming": {
+        "initial": {
+          "present": 79,
+          "total": 80,
+          "coverage": 0.9875
+        },
+        "pagination": {
+          "present": 67,
+          "total": 73,
+          "coverage": 0.9178
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            203
+          ],
+          "sample": "<whole opening-hours block>",
+          "note": "Presence of [203] is identical to presence of [203,0] — 146/153 on both."
+        },
+        {
+          "path": [
+            203,
+            1,
+            4,
+            0
+          ],
+          "sample": "Open · Closes 9 pm",
+          "note": "Today's rendered status string. 18 distinct values, same 146/153 coverage. Use for display, not for hasHours."
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            118,
+            "…",
+            3
+          ],
+          "confidence": 0.026,
+          "sample": "Wednesday",
+          "note": "REJECTED — [118] is a nested related-listing block, same family of trap as [37]. Coverage 4/153."
+        }
+      ],
+      "absenceIsExpected": true,
+      "arrayLengthByFraming": {
+        "initial": 1,
+        "pagination": 7
+      },
+      "notes": "hasHours = [203,0] resolves. That works in BOTH framings at 98.8% / 91.8%. The full week does NOT: [203,0] has length 1 (today only) in every \"initial\" payload and length 7 (Mon–Sun) in every \"pagination\" payload, 79/79 and 67/67 with no exceptions. Read hasHours anywhere; read a weekly schedule only from pagination payloads. The 7 records with no [203] are genuinely hours-less businesses (5 gyms in 006, 1 CA in 007, 1 CA in 008); all 16 cross-fixture repeat businesses agree on presence.",
+      "framingDependent": "partial — presence is framing-independent, schedule completeness is not"
+    },
+    "photoCount": {
+      "path": [
+        37,
+        1
+      ],
+      "type": "number",
+      "derivedFrom": "fixtures/raw/002-dentist-in-vijay-nagar-indore-scroll2.txt",
+      "derivedOn": "2026-08-05",
+      "sample": 9,
+      "sampleEvidence": "Same record's hero-thumbnail caption at [37,0,0,6,1] reads \"9 Photos\".",
+      "confidence": 0.9869,
+      "confirmedIn": 8,
+      "nullRate": 0.0131,
+      "distinctValues": 75,
+      "min": 1,
+      "max": 1224,
+      "median": 23,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 71,
+          "total": 73,
+          "coverage": 0.9726
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            37,
+            0,
+            0,
+            6,
+            1
+          ],
+          "confidence": 0.4118,
+          "sample": "9 Photos",
+          "note": "REJECTED as the primary path — the human-readable caption, but 0/80 in \"initial\" framing and it saturates (\"49+ Photos\", \"1224+ Photos\"). Used as the cross-check, not as the field."
+        },
+        {
+          "path": [
+            88,
+            4,
+            2
+          ],
+          "confidence": 1,
+          "sample": 607,
+          "note": "REJECTED — image pixel dimensions (607/608/1187). 100% coverage, 3 distinct values, no per-business variation. The known decoy."
+        },
+        {
+          "path": [
+            25,
+            18,
+            0,
+            3
+          ],
+          "confidence": 1,
+          "sample": 1,
+          "note": "REJECTED — UI chrome (\"Favourites\"/\"Want to go\"), constant."
+        }
+      ],
+      "validation": [
+        "Backwards from a known value: for all 62 records that carry the rendered caption at [37,0,0,6,1], the integer at [37,1] equals the caption's number, 62/62. No other integer path in the record matched better than 4/62.",
+        "Varies per business: 75 distinct values over 151 records, range 1–1224, median 23. Not a constant and not a dimension triple.",
+        "Stability: 16/16 businesses appearing in more than one fixture report the identical count in both.",
+        "The 2 records with no value have [37] = [null,null,null,\"<token>\"] — a stub with no hero image at all."
+      ],
+      "absenceIsExpected": true,
+      "notes": "Lives under [37], which is otherwise a documented trap ([37,0,0,…] is a hero-image / street-view block whose attribution name is often not this business). [37,1] specifically is this record's own photo count, proven by the 62/62 caption agreement inside the same record. Do not generalise this to other [37,*] paths. Null here is 'no hero image on the card', which is consistent with zero photos but is NOT observed to be an explicit 0 — keep it null and let the parser mark it absent rather than substituting 0."
     }
   },
-  "_privacyNote": "Sample values for phone, address and website are REDACTED. This repo is public and those fields are scraped personal/business data (CLAUDE.md deny rule). The real observed values remain in the local gitignored fixture named in each entry's derivedFrom, which is where provenance is actually verified."
+  "_privacyNote": "Sample values for phone, address and website are REDACTED. This repo is public and those fields are scraped personal/business data (CLAUDE.md deny rule). The real observed values remain in the local gitignored fixture named in each entry's derivedFrom, which is where provenance is actually verified.",
+  "_regenerationGap": "isUnclaimed, hours and photoCount were derived by targeted offline analysis on 2026-08-05, NOT by scripts/discover-fields.js. That script's leaf-pattern architecture does not yet express a presence-flag field (isUnclaimed), an array-node field (hours), or a caption-cross-validated integer (photoCount). Re-running `npm run discover` today would DROP these three entries. Extending the script to regenerate them is an open task; until then treat this file as hand-augmented and do not overwrite it blindly."
 }

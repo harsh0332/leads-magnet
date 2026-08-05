@@ -37,6 +37,8 @@ const BASE_GAP = {
   noWebsite: 40,
   socialOnly: 32,
   unclaimed: 25,
+  nameStuffed: 20,
+  badCategory: 15,
   noHours: 12,
   noPhotos: 12,
   poorRating: 10,
@@ -51,11 +53,63 @@ const SIGNAL_REQUIRES = {
   noWebsite: 'website',
   socialOnly: 'website',
   unclaimed: 'isUnclaimed',
+  nameStuffed: 'businessName',
+  badCategory: 'category',
   noHours: 'hours',
   noPhotos: 'photoCount',
   poorRating: 'rating',
   fewReviews: 'reviewCount',
 };
+
+/* ------------------------------------------------------------------ */
+/* Derived signals — computed from fields already extracted            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Google requires the listing name to be the real-world business name.
+ * Keyword-stuffed names are a documented suspension trigger, which is what
+ * makes this a concrete opener rather than a generic pitch.
+ *
+ * Returns null when the name was never observed — unknown is not a violation.
+ */
+export function isNameStuffed(name) {
+  if (typeof name !== 'string' || name.trim() === '') return null;
+  const pipes = (name.match(/\|/g) ?? []).length;
+  const slashes = (name.match(/\//g) ?? []).length;
+  return pipes >= 2 || slashes >= 3 || name.length > 70;
+}
+
+/**
+ * Primary category is the strongest local ranking factor. A dentist filed
+ * under "Medical clinic" loses the "dentist near me" pack outright.
+ *
+ * `trade` is the config/categories.json key recovered from the search term.
+ * Returns null when the category or the trade is unknown — an unknown trade
+ * must never be scored as a bad category.
+ */
+export function isBadCategory(category, trade, genericMap) {
+  if (typeof category !== 'string' || category.trim() === '') return null;
+  if (!trade) return null;
+  const blocked = genericMap?.[trade];
+  if (!Array.isArray(blocked)) return null;
+  const c = category.trim().toLowerCase();
+  return blocked.some((b) => b.trim().toLowerCase() === c);
+}
+
+/**
+ * Recover the config category key from a query's search term.
+ * "dental clinic in Vijay Nagar Indore" -> "dentist"
+ * Returns null when nothing matches, which disables badCategory for that row.
+ */
+export function tradeFromQuery(query, categories) {
+  const term = String(query ?? '').split(' in ')[0].trim().toLowerCase();
+  if (!term) return null;
+  for (const [key, terms] of Object.entries(categories ?? {})) {
+    if (key.startsWith('_') || !Array.isArray(terms)) continue;
+    if (terms.some((t) => String(t).trim().toLowerCase() === term)) return key;
+  }
+  return null;
+}
 
 /**
  * noWebsite and socialOnly are mutually exclusive — a record scores one or the
@@ -118,10 +172,56 @@ const truthy = (v) => v === 'true' || v === true;
 const isFalse = (v) => v === 'false' || v === false;
 
 /* ------------------------------------------------------------------ */
+/* Dedupe                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Collapse rows sharing a normalized phone, keeping the highest reviewCount.
+ *
+ * Rows with NO phone are never grouped — an empty key would fold every
+ * phoneless business into a single record. Ties (including the common case
+ * where both sides have an unobserved reviewCount) keep the first row, so the
+ * result is deterministic rather than dependent on sort order.
+ *
+ * @returns {{rows: object[], collapsed: number, groups: object[]}}
+ */
+export function dedupeByPhone(rows) {
+  const byPhone = new Map();
+  const noPhone = [];
+
+  for (const r of rows) {
+    const key = (r.phone ?? '').trim();
+    if (!key) { noPhone.push(r); continue; }
+    if (!byPhone.has(key)) byPhone.set(key, []);
+    byPhone.get(key).push(r);
+  }
+
+  const kept = [];
+  const groups = [];
+  let collapsed = 0;
+
+  for (const [phone, members] of byPhone) {
+    if (members.length === 1) { kept.push(members[0]); continue; }
+    const best = members.reduce((a, b) =>
+      (num(b.reviewCount) ?? -1) > (num(a.reviewCount) ?? -1) ? b : a
+    );
+    kept.push(best);
+    collapsed += members.length - 1;
+    groups.push({
+      phone,
+      kept: best.name,
+      dropped: members.filter((m) => m !== best).map((m) => m.name),
+    });
+  }
+
+  return { rows: [...kept, ...noPhone], collapsed, groups };
+}
+
+/* ------------------------------------------------------------------ */
 /* Scoring                                                             */
 /* ------------------------------------------------------------------ */
 
-export function scoreRow(row, W) {
+export function scoreRow(row, W, ctx = {}) {
   const reviews = num(row.reviewCount);
   const rating = num(row.rating);
   const phone = (row.phone ?? '').trim();
@@ -139,6 +239,18 @@ export function scoreRow(row, W) {
   }
 
   if (W.unclaimed && truthy(row.isUnclaimed)) { gap += W.unclaimed; reasons.push('listing unclaimed'); }
+
+  // Derived signals. Each returns null when the input was never observed, and
+  // null must never score — an unknown is not a violation.
+  if (W.nameStuffed && isNameStuffed(row.name) === true) {
+    gap += W.nameStuffed;
+    reasons.push('listing name violates Google naming policy — suspension risk');
+  }
+  const trade = tradeFromQuery(row.query, ctx.categories);
+  if (W.badCategory && isBadCategory(row.category, trade, ctx.genericCategories) === true) {
+    gap += W.badCategory;
+    reasons.push('wrong primary GMB category — hurts map pack ranking');
+  }
   if (W.noHours && isFalse(row.hasHours)) { gap += W.noHours; reasons.push('no hours'); }
   if (W.noPhotos && isFalse(row.hasPhotos)) { gap += W.noPhotos; reasons.push('no photos'); }
 
@@ -161,7 +273,7 @@ export function scoreRow(row, W) {
 
   let tier = 'X';
   if (likelyEnterprise) tier = 'C';
-  else if (gap >= 50 && demand >= 55 && phone) tier = 'A';
+  else if (gap >= 50 && demand >= 75 && phone) tier = 'A';
   else if (gap >= 40 && demand >= 30 && phone) tier = 'B';
   else if (gap >= 30 && phone) tier = 'C';
 
@@ -214,6 +326,12 @@ function main() {
     log(`  ${Object.entries(weights).map(([k, v]) => `${k}=${v}`).join('  ')}`);
   }
 
+  const categories = JSON.parse(fs.readFileSync(path.join('config', 'categories.json'), 'utf8'));
+  const scoreCtx = {
+    categories,
+    genericCategories: categories._genericCategories ?? {},
+  };
+
   const blacklist = loadBlacklist();
 
   // Dedupe by cid ONLY.
@@ -234,13 +352,27 @@ function main() {
     return true;
   });
 
+  // Second pass: collapse records that share a normalized phone number.
+  //
+  // Google emits the same business under more than one cid often enough that
+  // cid-alone leaves visible duplicates in the call list. Grouping by phone and
+  // keeping the highest reviewCount picks the better-established of the pair.
+  //
+  // KNOWN COLLATERAL, measured not assumed: this cannot distinguish a duplicate
+  // listing from distinct businesses sharing a reception line. Fixture 007 has
+  // three legally separate CA firms at Astha Tower, Ujjain on one number; this
+  // pass collapses them to one. `phoneCollapsed` is logged every run so the
+  // cost stays visible. A name-similarity guard would separate the two cases.
+  const { rows: phoneUnique, collapsed: phoneCollapsed, groups: phoneGroups } =
+    dedupeByPhone(unique);
+
   // permanentlyClosed has no field-map path, so the documented "always exclude
   // permanently closed" rule CANNOT be enforced yet. Filter on it only where it
   // was actually observed; never treat an unobserved value as false.
-  const open = unique.filter((r) => !truthy(r.permanentlyClosed));
+  const open = phoneUnique.filter((r) => !truthy(r.permanentlyClosed));
 
   const scored = open
-    .map((r) => scoreRow(r, weights))
+    .map((r) => scoreRow(r, weights, scoreCtx))
     .filter((r) => r.tier !== 'X')
     .sort((a, b) =>
       a.tier.localeCompare(b.tier) || b.demandScore - a.demandScore || b.gapScore - a.gapScore
@@ -250,7 +382,13 @@ function main() {
   writeCsv(path.join(OUT, 'tier-a.csv'), LEAD_HEADERS, scored.filter((r) => r.tier === 'A'));
 
   const counts = scored.reduce((a, r) => ({ ...a, [r.tier]: (a[r.tier] ?? 0) + 1 }), {});
-  log(`Scored ${scored.length} of ${raw.length} raw (${raw.length - unique.length} dupes, ${blacklisted} blacklisted)`);
+  log(`Scored ${scored.length} of ${raw.length} raw (${raw.length - unique.length} cid dupes, ${blacklisted} blacklisted)`);
+  if (phoneCollapsed) {
+    log(`Phone dedupe: collapsed ${phoneCollapsed} record(s) across ${phoneGroups.length} shared number(s)`);
+    for (const g of phoneGroups) {
+      log(`  ${g.phone}  kept "${g.kept}"  dropped ${g.dropped.map((n) => `"${n}"`).join(', ')}`);
+    }
+  }
   log(`A: ${counts.A ?? 0} · B: ${counts.B ?? 0} · C: ${counts.C ?? 0}`);
   log(`Next: npm run report -- --run=${runId}`);
 }

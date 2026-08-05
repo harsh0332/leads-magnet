@@ -104,6 +104,8 @@ export const FIELD_BINDINGS = Object.freeze({
   lat: 'latitude',
   lng: 'longitude',
   isUnclaimed: 'isUnclaimed',
+  hours: 'hours',
+  photoCount: 'photoCount',
   permanentlyClosed: 'permanentlyClosed',
   placeId: 'placeId',
 });
@@ -114,8 +116,8 @@ export const REQUIRED_FIELDS = Object.freeze(['cid', 'name']);
 /** Every key a Place carries, in emission order. */
 export const PLACE_FIELDS = Object.freeze([
   'cid', 'name', 'category', 'rating', 'reviewCount', 'phone', 'website',
-  'address', 'area', 'lat', 'lng', 'isUnclaimed', 'permanentlyClosed',
-  'placeId', 'hasWebsite', 'isSocialOnly',
+  'address', 'area', 'lat', 'lng', 'isUnclaimed', 'hours', 'photoCount',
+  'permanentlyClosed', 'placeId', 'hasWebsite', 'isSocialOnly', 'hasHours', 'hasPhotos',
 ]);
 
 export const FIELD_STATE = Object.freeze({
@@ -258,6 +260,19 @@ function extractField(recordNode, placeKey, fieldMap, framing) {
 
   const hit = resolvePath(recordNode, spec.path);
   const where = `path ${JSON.stringify(spec.path)}`;
+
+  // A presence-flag field: the node's EXISTENCE is the value. isUnclaimed is
+  // the case — [49,0] holds a "Claim this business" CTA link that Google only
+  // renders on listings with no verified owner. Absence here is a real `false`,
+  // not a failed extraction, so this must be decided before the absent/unknown
+  // logic below. Verified against the fixtures: 28/153 positive, and the CTA's
+  // fp= parameter matches the record's OWN cid 28/28.
+  if (spec.type === 'booleanByPresence') {
+    if (hit.outcome === 'not-indexable') {
+      return unknown(`path-type-mismatch at depth ${hit.depth} of ${where}`, { path: spec.path });
+    }
+    return { state: FIELD_STATE.OK, value: hit.outcome === 'value' };
+  }
 
   if (hit.outcome === 'not-indexable') {
     // Schema drift: the payload changed shape under us. Never guess.
@@ -487,6 +502,35 @@ export function parseOneRecord(recordNode, index = 0, fieldMap = DEFAULT_FIELD_M
     const reason = `website-${websiteState}: ${meta.fields.website.reason ?? 'no reason recorded'}`;
     meta.fields.hasWebsite = { state: FIELD_STATE.UNKNOWN, reason };
     meta.fields.isSocialOnly = { state: FIELD_STATE.UNKNOWN, reason };
+  }
+
+  // Derived: hasHours / hasPhotos. Same discipline as hasWebsite — an
+  // unresolved source field must yield null, never false, or a drifted path
+  // silently awards a gap signal to every record.
+  const hoursState = meta.fields.hours.state;
+  if (hoursState === FIELD_STATE.OK) {
+    place.hasHours = Array.isArray(place.hours) && place.hours.length > 0;
+    meta.fields.hasHours = { state: FIELD_STATE.OK };
+  } else if (hoursState === FIELD_STATE.ABSENT) {
+    place.hasHours = false;
+    meta.fields.hasHours = { state: FIELD_STATE.OK, derivedFrom: 'hours:absent' };
+  } else {
+    place.hasHours = null;
+    meta.fields.hasHours = { state: hoursState, reason: `hours-${hoursState}` };
+  }
+
+  const photoState = meta.fields.photoCount.state;
+  if (photoState === FIELD_STATE.OK) {
+    place.hasPhotos = Number(place.photoCount) > 0;
+    meta.fields.hasPhotos = { state: FIELD_STATE.OK };
+  } else if (photoState === FIELD_STATE.ABSENT) {
+    // The payload gives a stub with no hero image. Consistent with zero photos
+    // but never observed as an explicit 0, so photoCount stays null.
+    place.hasPhotos = false;
+    meta.fields.hasPhotos = { state: FIELD_STATE.OK, derivedFrom: 'photoCount:absent' };
+  } else {
+    place.hasPhotos = null;
+    meta.fields.hasPhotos = { state: photoState, reason: `photoCount-${photoState}` };
   }
 
   for (const key of REQUIRED_FIELDS) {
