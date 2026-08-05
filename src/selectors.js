@@ -1,106 +1,51 @@
 /**
- * SINGLE SOURCE OF TRUTH FOR ALL GOOGLE MAPS SELECTORS.
+ * PAGE-CONTROL SELECTORS ONLY. No data is ever read from the DOM.
  *
- * When Maps changes its DOM, this is the ONLY file that should need editing.
- * If you find yourself adding a selector anywhere else, stop.
+ * Every field now comes from intercepted network payloads, parsed offline
+ * against config/field-map.json (see src/parse.js). The only reasons this file
+ * still exists are:
  *
- * Stability order — data-item-id > role > aria-label > href > structural.
- * Obfuscated class names (.Nv2PK, .hfpxzc) are banned. They rotate.
+ *   1. driving the page — scrolling the results feed, dismissing consent
+ *   2. SOCIAL_DOMAINS, which is domain classification, not a selector
  *
- * Run `/verify-selectors` before trusting any of this.
+ * If you find yourself adding a selector here to READ a value, stop. That is a
+ * field-map entry, and it needs a captured fixture to justify it.
+ *
+ * The deleted DETAIL block and its per-field selectors are documented in
+ * REVIEW.md — they are why the predecessor produced confidently wrong data.
+ * There is no detail-panel pass any more; phone and website arrive in the list
+ * response.
  */
 
 export const URL_TEMPLATE = (query) =>
   `https://www.google.com/maps/search/${encodeURIComponent(query)}?hl=en&gl=in`;
 
-/* ---------- PASS 1 : results feed, no clicking ---------- */
+/**
+ * The endpoint carrying listing data. Both the initial payload and the
+ * scroll-triggered pagination payload share this marker; the two differ in
+ * body framing, which src/parse.js detects from the leading bytes.
+ *
+ * Do NOT narrow this to URLs containing `q=` — both variants contain it, the
+ * pagination one just carries it at the end of the query string.
+ */
+export const DATA_ENDPOINT_MARKER = 'tbm=map';
 
 export const FEED = {
-  // The scrollable results container. NOT the window.
+  // The scrollable results container. NOT the window — scrolling `window` or
+  // using page.mouse.wheel() does nothing. Set scrollTop on this element.
   container: 'div[role="feed"]',
-
-  // Individual result cards inside the feed.
-  card: 'div[role="feed"] > div > div[jsaction]',
-
-  // Anchor inside a card. Its aria-label is the business name,
-  // its href is the canonical place URL.
-  placeLink: 'a[href*="/maps/place/"]',
-
-  // Rating widget. aria-label reads like "4.6 stars 214 Reviews".
-  ratingWidget: 'span[role="img"][aria-label*="star"]',
-
-  // Presence of this = the listing has a website. Absence = it doesn't.
-  // VERIFY THIS ONE FIRST — the data-value label is the most likely to change.
-  websiteBtn: 'a[data-value="Website"]',
-
-  // Fallbacks if the above stops matching. Try in order.
-  websiteBtnFallbacks: [
-    'a[data-value="Open website"]',
-    'a[aria-label^="Visit"][target="_blank"]',
-  ],
-
-  directionsBtn: '[data-value="Directions"]',
 
   // Consent / cookie interstitial that sometimes precedes results.
   consentAccept: 'button[aria-label*="Accept all"], form[action*="consent"] button',
 };
 
-/* ---------- PASS 2 : detail panel, only for filtered records ---------- */
-
-export const DETAIL = {
-  name: 'h1:not([class*="fontTitleLarge"])',
-
-  // data-item-id="phone:tel:+919876543210" — parse the attribute, not the text.
-  phoneBtn: 'button[data-item-id^="phone:tel:"]',
-
-  // Absent = genuinely no website.
-  websiteLink: 'a[data-item-id="authority"]',
-
-  addressBtn: 'button[data-item-id="address"]',
-  plusCodeBtn: 'button[data-item-id="oloc"]',
-
-  // Hours block. Two known shapes.
-  hoursBtn: 'button[data-item-id="oh"], [jsaction*="openhours"]',
-
-  // Unclaimed listings surface an ownership CTA.
-  claimLink: 'a[href*="/business/"], a[href*="business.google.com"]',
-  claimTextPattern: /claim this business|own this business/i,
-
-  // Photo strip / count.
-  photoButton: 'button[aria-label*="Photo"], button[jsaction*="heroHeaderImage"]',
-
-  // Category label sits directly under the h1.
-  categoryBtn: 'button[jsaction*="category"]',
-
-  // Status banners.
-  closedBanner: 'span:has-text("Permanently closed"), span:has-text("Temporarily closed")',
-
-  reviewCount: 'span[aria-label*="review"], button[jsaction*="reviewChart"]',
-};
-
-/* ---------- Regex helpers ---------- */
-
-export const PATTERNS = {
-  // "4.6 stars"
-  rating: /([\d.]+)\s*stars?/i,
-
-  // Fallback when review count renders separately.
-  ratingOnly: /^([\d.]+)\s*stars?/i,
-
-  // data-item-id="phone:tel:+919876543210"
-  phoneFromAttr: /^phone:tel:(.+)$/,
-
-  // CID / place identifier from the URL, used for dedupe.
-  cid: /!1s([^!]+)/,
-  placeSlug: /\/maps\/place\/([^/]+)\//,
-
-  sponsored: /^(sponsored|ad)$/i,
-};
-
-/* ---------- Classification ---------- */
-
-// A "website" pointing at one of these is really a social/directory page.
-// These are BETTER leads than a blank field — see .agents/rules/20-scoring.md
+/**
+ * A "website" pointing at one of these is really a social/directory page.
+ * These are BETTER leads than a blank field — see .agents/rules/20-scoring.md.
+ *
+ * Imported by src/parse.js. Matching is on HOSTNAME, not substring, so
+ * `https://mysite.com/?ref=facebook.com` is not misread as social.
+ */
 export const SOCIAL_DOMAINS = [
   'facebook.com', 'fb.com', 'instagram.com', 'justdial.com',
   'sulekha.com', 'indiamart.com', 'practo.com', 'linktr.ee',
