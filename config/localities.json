@@ -1,0 +1,44 @@
+{
+  "_note": "Breaks the ~120-results-per-search ceiling. Each locality becomes a separate query. Agent: add new cities here, never hardcode in src/.",
+
+  "Indore": [
+    "Vijay Nagar", "New Palasia", "Old Palasia", "Rajwada", "Sudama Nagar",
+    "Bhawarkua", "AB Road", "Scheme 54", "Scheme 78", "Rau",
+    "Sapna Sangeeta", "Geeta Bhawan", "Bengali Square", "MR 10 Road",
+    "Khajrana", "Nipania", "Silicon City", "Annapurna Road",
+    "Mahalaxmi Nagar", "Tilak Nagar", "South Tukoganj", "Manik Bagh",
+    "Pipliyahana", "LIG Colony", "Dewas Naka"
+  ],
+
+  "Bhopal": [
+    "MP Nagar", "Arera Colony", "New Market", "Kolar Road", "Shahpura",
+    "Bairagarh", "Hoshangabad Road", "Ayodhya Bypass", "Indrapuri",
+    "Chuna Bhatti", "Habibganj", "TT Nagar", "Bittan Market",
+    "Karond", "Awadhpuri", "Misrod", "Berasia Road", "Lalghati",
+    "Danish Kunj", "Katara Hills", "Ashoka Garden", "Piplani"
+  ],
+
+  "Guna": [
+    "Cantt Area", "AB Road", "Jaistambh Chowk", "Naya Bazaar",
+    "Hospital Road", "Station Road", "Sadar Bazaar", "Bajrangarh Road",
+    "Fatehgarh", "Kacheri Road", "Ashok Nagar Road", "Raghogarh"
+  ],
+
+  "Jabalpur": [
+    "Napier Town", "Wright Town", "Civil Lines", "Vijay Nagar",
+    "Adhartal", "Gorakhpur", "Ranjhi", "Madan Mahal", "Sadar",
+    "Katanga", "Vijay Nagar Bypass", "Tilhari", "Karmeta", "Garha"
+  ],
+
+  "Ujjain": [
+    "Freeganj", "Nanakheda", "Mahakal Road", "Dewas Road", "Agar Road",
+    "Rishi Nagar", "Vikram Nagar", "Chimanganj Mandi", "Indira Nagar",
+    "Nagziri", "Sethi Nagar", "Madhav Nagar"
+  ],
+
+  "Pithampur": [
+    "Sector 1", "Sector 2", "Sector 3", "Sector 4", "Bagdun",
+    "Sagore", "Industrial Area", "Dhannad Road", "Bhensola", "Tarpura",
+    "Kheda", "Smart Industrial Park", "SEZ Zone", "Auto Cluster Zone", "AKVN Area"
+  ]
+}

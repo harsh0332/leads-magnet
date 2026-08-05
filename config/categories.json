@@ -1,0 +1,62 @@
+{
+  "_note": "Search-term synonyms. Each term x each locality = one query. Keep 4-8 terms per category. Agent: add new categories here.",
+
+  "dentist": [
+    "dentist", "dental clinic", "dental hospital",
+    "orthodontist", "dental surgeon", "dental implant clinic"
+  ],
+
+  "interior designer": [
+    "interior designer", "interior decorator", "modular kitchen",
+    "home interior", "furniture designer", "false ceiling contractor"
+  ],
+
+  "doctor": [
+    "clinic", "physician", "general physician",
+    "polyclinic", "specialist doctor"
+  ],
+
+  "gym": [
+    "gym", "fitness centre", "health club",
+    "crossfit", "yoga studio", "personal trainer"
+  ],
+
+  "salon": [
+    "beauty parlour", "salon", "unisex salon",
+    "hair salon", "spa", "makeup artist"
+  ],
+
+  "restaurant": [
+    "restaurant", "cafe", "family restaurant",
+    "pure veg restaurant", "banquet hall"
+  ],
+
+  "coaching": [
+    "coaching classes", "tuition centre", "institute",
+    "competitive exam coaching", "computer institute"
+  ],
+
+  "real estate": [
+    "real estate agent", "property dealer", "builder",
+    "property consultant", "estate agency"
+  ],
+
+  "factory": [
+    "manufacturer", "factory", "industrial unit",
+    "fabrication works", "packaging manufacturer", "engineering works"
+  ],
+
+  "boutique": [
+    "boutique", "designer boutique", "ladies tailor",
+    "bridal wear", "saree shop"
+  ],
+
+  "veterinary": [
+    "veterinary clinic", "pet clinic", "animal hospital", "pet shop"
+  ],
+
+  "chartered accountant": [
+    "chartered accountant", "CA firm", "tax consultant",
+    "GST consultant", "accounting services"
+  ]
+}
