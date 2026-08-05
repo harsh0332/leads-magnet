@@ -168,7 +168,39 @@ with an existing agency — flag `likelyEnterprise: true` and drop to Tier C.
 | **A** | gap ≥ 50 AND demand ≥ 75 AND has phone | Call today |
 | **B** | gap ≥ 40 AND demand ≥ 30 AND has phone | Call this week |
 | **C** | gap ≥ 30 AND has phone | Backlog |
+| **U** | reviewCount never observed AND has phone | Unknown demand — reported separately |
 | **X** | everything else | Excluded from report |
+
+### Tier U — unknown demand (added 2026-08-06)
+
+`demandScore(null)` used to return 10, which scored "we never observed a review
+count" identically to "this business has zero reviews". Those are different
+states, and collapsing them put every unobserved record at the bottom of the
+demand axis — invisibly, because 10 is a plausible-looking number.
+
+A record whose `reviewCount` is null is now tiered **U** rather than scored.
+`U` is reported separately from C and its count is logged every run.
+
+**The point of U is to be visible.** A silent 10 hides a data bug; a visible U
+surfaces it. If U is more than a few percent of a run, something upstream is
+dropping review counts and the fix belongs there, not here.
+
+### Record merge, not copy preference
+
+Deduplication by `cid` used to keep the first-seen copy. That is wrong, because
+the two response framings carry different fields:
+
+- **initial** responses omit `reviewCount` entirely (`rec[4]` has length 8)
+- **pagination** responses carry it (length 9)
+
+Keep-first therefore systematically discarded the only copy carrying the review
+count, which starved the demand axis and made Tier A unreachable.
+
+Records are now **merged field by field across every copy of a cid, preferring
+the first non-null value per field**. Neither copy is chosen wholesale in either
+direction — the initial copy carries fields the pagination copy lacks and vice
+versa. `raw.csv` keeps every copy; the merge happens at scoring time, so the raw
+file stays an honest record of what was actually returned.
 
 Sort within tier by `demand` descending — biggest business first.
 

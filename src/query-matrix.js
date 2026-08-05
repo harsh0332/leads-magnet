@@ -157,9 +157,15 @@ export function resolveArea({ address, query, city, localities = loadLocalities(
 /* ------------------------------------------------------------------ */
 
 /** Tuning for the per-locality early exit. Documented in AGENTS.md. */
+// Threshold set from measured data, not intuition. The specialist terms
+// (orthodontist, dental surgeon, implant clinic) recover into a 0.17-0.28
+// new-record band AFTER two weak terms, because they surface partly disjoint
+// businesses -- which is why the synonym list exists. A 0.20 floor cut exactly
+// those terms: 43% of queries saved but 19.1% of unique records lost. A 0.10
+// floor sits below the recovery band: 17% saved for 1.3% lost.
 export const ADAPTIVE = Object.freeze({
   minTerms: 2,            // always run at least this many terms per locality
-  newRatioFloor: 0.20,    // below this, a term counts as "exhausted"
+  newRatioFloor: 0.10,    // below this, a term counts as "exhausted"
   consecutiveToStop: 2,   // this many exhausted terms in a row ends the locality
 });
 

@@ -599,3 +599,48 @@ test('website coverage holds per fixture, not just corpus-wide', () => {
     rows.map((r) => `${r.file}: ${r.cov.toFixed(1)}%`).join('\n  ')
   );
 });
+
+/* ================================================================== */
+/* NULL-LEAF PAGINATION VARIANT                                        */
+/* ================================================================== */
+
+/** Build a body whose record container resolves to an explicit null. */
+function nullContainerBody(framing) {
+  const slot = DEFAULT_FIELD_MAP.recordRoot.containerPath[0];
+  const payload = Object.assign([], { length: slot + 6, [slot]: null });
+  const inner = `)]}'\n${JSON.stringify(payload)}`;
+  return framing === 'pagination'
+    ? `${JSON.stringify({ c: 0, d: inner })}/*""*/`
+    : inner;
+}
+
+test('null record container on a PAGINATION response returns [] and does not throw', () => {
+  // Google emits this when a scroll fetches past the end of a result set.
+  // Measured at ~3% of live queries; it used to abort the whole query.
+  const body = nullContainerBody('pagination');
+  let out;
+  assert.doesNotThrow(() => { out = parseSearchResponseDetailed(body); });
+  assert.equal(out.framing, 'pagination');
+  assert.deepEqual(out.records, []);
+  assert.equal(out.containerLength, 0);
+  assert.match(out.warning ?? '', /empty-pagination/);
+  assert.deepEqual(parseSearchResponse(body), []);
+});
+
+test('null record container on an INITIAL response still throws', () => {
+  // On an initial response the container is always populated, so a null there
+  // really does mean the field map is stale. Staying fatal is the point.
+  assert.throws(
+    () => parseSearchResponseDetailed(nullContainerBody('initial')),
+    /did not resolve to an array|stale/i
+  );
+});
+
+test('a real fixture still reports no empty-pagination warning', () => {
+  // Guards against the degrade path swallowing a genuine container break.
+  for (const { file, body } of FIXTURES) {
+    const out = parseSearchResponseDetailed(body);
+    assert.equal(out.warning, undefined, `${file} unexpectedly warned: ${out.warning}`);
+    assert.ok(out.records.length > 0, `${file} produced no records`);
+  }
+});

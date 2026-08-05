@@ -172,6 +172,57 @@ const truthy = (v) => v === 'true' || v === true;
 const isFalse = (v) => v === 'false' || v === false;
 
 /* ------------------------------------------------------------------ */
+/* Merge                                                               */
+/* ------------------------------------------------------------------ */
+
+/** Blank cell, whatever shape it arrives in. */
+const isBlank = (v) => v === null || v === undefined || v === '';
+
+/**
+ * Merge every copy of a cid into one record, field by field, preferring the
+ * FIRST non-blank value per field.
+ *
+ * This replaces a keep-first-copy dedupe, which was wrong: the two response
+ * framings carry different fields. An "initial" response omits reviewCount
+ * entirely (rec[4] length 8) while a "pagination" response carries it (length
+ * 9), so keeping whichever copy arrived first systematically discarded the only
+ * source of the review count -- which starved the demand axis and made Tier A
+ * unreachable. Neither copy is chosen wholesale in either direction.
+ *
+ * @returns {{rows: object[], merged: number, filled: Record<string, number>}}
+ *          `filled` counts how many records had each field supplied by a LATER
+ *          copy, which is the evidence that the merge is doing real work.
+ */
+export function mergeByCid(rows) {
+  const byCid = new Map();
+  const order = [];
+  const filled = {};
+  let merged = 0;
+
+  for (const row of rows) {
+    const key = row.cid || row.placeId;
+    if (!key) continue;
+
+    if (!byCid.has(key)) {
+      byCid.set(key, { ...row });
+      order.push(key);
+      continue;
+    }
+
+    merged += 1;
+    const target = byCid.get(key);
+    for (const [field, value] of Object.entries(row)) {
+      if (isBlank(target[field]) && !isBlank(value)) {
+        target[field] = value;
+        filled[field] = (filled[field] ?? 0) + 1;
+      }
+    }
+  }
+
+  return { rows: order.map((k) => byCid.get(k)), merged, filled };
+}
+
+/* ------------------------------------------------------------------ */
 /* Dedupe                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -268,11 +319,17 @@ export function scoreRow(row, W, ctx = {}) {
 
   gap = Math.max(0, Math.min(100, Math.round(gap * 10) / 10));
 
-  const demand = demandScore(reviews);
+  // reviewCount null means NEVER OBSERVED, which is not the same as zero
+  // reviews. Scoring it 10 put every unobserved record silently at the bottom
+  // of the demand axis. Such a record is tiered 'U' and reported separately, so
+  // a data problem upstream is visible instead of looking like weak demand.
+  const demandKnown = reviews !== null;
+  const demand = demandKnown ? demandScore(reviews) : null;
   const likelyEnterprise = (reviews ?? 0) >= 2000;
 
   let tier = 'X';
-  if (likelyEnterprise) tier = 'C';
+  if (!demandKnown) tier = phone ? 'U' : 'X';
+  else if (likelyEnterprise) tier = 'C';
   else if (gap >= 50 && demand >= 75 && phone) tier = 'A';
   else if (gap >= 40 && demand >= 30 && phone) tier = 'B';
   else if (gap >= 30 && phone) tier = 'C';
@@ -342,15 +399,23 @@ function main() {
   // 0734 2XX XXXX (redacted). Phone-deduping silently deleted two real leads and counted
   // them as duplicates. cid is unique per business in the payload — it is the
   // correct and sufficient key.
-  const seen = new Set();
+  const { rows: mergedRows, merged, filled } = mergeByCid(raw);
+
   let blacklisted = 0;
-  const unique = raw.filter((r) => {
+  const unique = mergedRows.filter((r) => {
     const key = r.cid ?? r.placeId;
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
     if (blacklist.has(key)) { blacklisted += 1; return false; }
     return true;
   });
+
+  const nullReviews = unique.filter((r) => num(r.reviewCount) === null).length;
+  log(`Merged ${merged} duplicate copies into ${mergedRows.length} records`);
+  if (Object.keys(filled).length) {
+    const top = Object.entries(filled).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    log(`  fields supplied by a later copy: ${top.map(([f, n]) => `${f}=${n}`).join('  ')}`);
+  }
+  log(`  reviewCount still null on ${nullReviews}/${unique.length} ` +
+      `(${(nullReviews / (unique.length || 1) * 100).toFixed(1)}%) → those tier as U`);
 
   // Second pass: collapse records that share a normalized phone number.
   //
@@ -375,21 +440,23 @@ function main() {
     .map((r) => scoreRow(r, weights, scoreCtx))
     .filter((r) => r.tier !== 'X')
     .sort((a, b) =>
-      a.tier.localeCompare(b.tier) || b.demandScore - a.demandScore || b.gapScore - a.gapScore
+      a.tier.localeCompare(b.tier) ||
+      (b.demandScore ?? -1) - (a.demandScore ?? -1) ||
+      b.gapScore - a.gapScore
     );
 
   writeCsv(path.join(OUT, 'leads.csv'), LEAD_HEADERS, scored);
   writeCsv(path.join(OUT, 'tier-a.csv'), LEAD_HEADERS, scored.filter((r) => r.tier === 'A'));
 
   const counts = scored.reduce((a, r) => ({ ...a, [r.tier]: (a[r.tier] ?? 0) + 1 }), {});
-  log(`Scored ${scored.length} of ${raw.length} raw (${raw.length - unique.length} cid dupes, ${blacklisted} blacklisted)`);
+  log(`Scored ${scored.length} of ${raw.length} raw rows (${blacklisted} blacklisted)`);
   if (phoneCollapsed) {
     log(`Phone dedupe: collapsed ${phoneCollapsed} record(s) across ${phoneGroups.length} shared number(s)`);
     for (const g of phoneGroups) {
       log(`  ${g.phone}  kept "${g.kept}"  dropped ${g.dropped.map((n) => `"${n}"`).join(', ')}`);
     }
   }
-  log(`A: ${counts.A ?? 0} · B: ${counts.B ?? 0} · C: ${counts.C ?? 0}`);
+  log(`A: ${counts.A ?? 0} · B: ${counts.B ?? 0} · C: ${counts.C ?? 0} · U: ${counts.U ?? 0} (unknown demand)`);
   log(`Next: npm run report -- --run=${runId}`);
 }
 
