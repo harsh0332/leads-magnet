@@ -20,7 +20,7 @@ with zero gap is a bad fit (already has an agency). **The money is in high gap
 | Signal | Points | Why |
 |---|---|---|
 | No website at all | 40 | The core pitch |
-| Website is social/directory only | 32 | Better lead — they already want presence |
+| Website is social/directory only | 40 | Better lead — they already want presence |
 | Listing unclaimed | 25 | Nobody is managing this |
 | No hours listed | 12 | Neglected profile |
 | No photos / under 3 photos | 12 | Neglected profile |
@@ -28,60 +28,39 @@ with zero gap is a bad fit (already has an agency). **The money is in high gap
 | Under 10 reviews total | 8 | Not collecting reviews |
 | No phone on listing | −25 | You literally cannot call them |
 
-### Observable-signal rescaling (added 2026-08-05)
+### Observable-signal rescaling (added 2026-08-05, NOW DORMANT)
 
-Three of the signals above **cannot currently be observed**. They have no path
-in `config/field-map.json`, so the payload never yields them:
+When a gap signal has no path in `config/field-map.json` its weight cannot be
+observed, and leaving it in the budget is not neutral: every lead lands short of
+the tier it belongs in, and the report prints a confidently wrong "Tier A: 0".
+That is the REVIEW.md S1-1 failure by another route.
 
-| Signal | Weight | Status |
-|---|---|---|
-| Listing unclaimed | 25 | no field-map path — unmapped |
-| No hours listed | 12 | no field-map path — unmapped |
-| No photos | 12 | no field-map path — unmapped |
+So the observable signals are rescaled **at runtime** to preserve their ratios
+and the original achievable maximum, and every run prints what was dropped and
+the scale factor. A silently reweighted model is exactly as dangerous as a
+silently broken field.
 
-That is **49 of the 107-point positive budget**.
+**As of 2026-08-06 the rescale is dormant — scale = 1.0 — because `discover`
+mapped the last three unmapped signals** (`isUnclaimed` `[49,0]`, `hours`
+`[203,0]`, `photoCount` `[37,1]`). Every weight in the table above is now used
+at face value. This is exactly the automatic revert the runtime design was for:
+nobody had to remember to undo anything.
 
-Leaving those weights in the table would not be neutral. A business with no
-website and under ten reviews would score `40 + 8 = 48` against a Tier A floor
-of 50 — every lead would land one or two points below the tier it belongs in,
-and the report would print "Tier A: 0" while looking entirely correct. That is
-the REVIEW.md S1-1 failure by another route.
+It will re-arm on its own if a future payload change breaks a path. Two
+properties it must keep:
 
-So the **observable** signals are rescaled to preserve their ratios and the
-original achievable maximum:
+1. **Computed at runtime** from which fields the map actually provides, never
+   hardcoded.
+2. **Printed every run.** If you see a scale factor in the log, some signal has
+   stopped resolving and that is the thing to fix — not the weights.
 
-```
-scale = 142 / 93 = 1.527      (after nameStuffed + badCategory were added)
+Restoring a broken signal requires a fixture-derived path recorded in
+`config/field-map.json` with its provenance. Never restore a weight by guessing
+an index.
 
-noWebsite    40 -> 61.1
-socialOnly   32 -> 48.9
-nameStuffed  20 -> 30.5
-badCategory  15 -> 22.9
-poorRating   10 -> 15.3
-fewReviews    8 -> 12.2
-noPhone     -25 -> -25   (a penalty, never rescaled)
-```
-
-Adding the two derived signals lowered the scale factor from 1.845 to 1.527,
-because more of the budget is now observable. `noWebsite` alone fell from 73.8
-to 61.1 — still above the gap ≥ 50 floor on its own, which is why the Tier A
-demand floor below is doing the selectivity work.
-
-`noWebsite` and `socialOnly` stay mutually exclusive, so only the larger counts
-toward the ceiling. Gap is still clamped to 0–100 and the tier thresholds are
-**unchanged**.
-
-Two properties this must keep:
-
-1. **The rescale is computed at runtime** in `src/score.js` from which fields
-   the field map actually provides. When `discover` maps `isUnclaimed`, the
-   weights revert automatically — nobody has to remember to undo this.
-2. **Every run prints what was dropped and the scale factor.** A silently
-   reweighted model is exactly as dangerous as a silently broken field.
-
-Restoring these signals requires a fixture-derived path for each, recorded in
-`config/field-map.json` with its provenance. Do not restore a weight by
-guessing an index.
+Note that `noWebsite` and `socialOnly` are mutually exclusive — a record scores
+one or the other, never both — so only the larger counts toward the ceiling.
+Now that both are 40 the achievable positive maximum is 142, clamped to 100.
 
 ### Two signals computed from fields we already have (added 2026-08-05)
 
@@ -140,9 +119,27 @@ raise the percentage would be fitting the rule to the expectation.
 `facebook.com`, `instagram.com`, `linktr.ee`, `wa.me`, `sulekha.com`,
 `indiamart.com`, `practo.com`, `linktree`, or a `sites.google.com` page.
 
-**Why social-only scores nearly as high as no-website:** that owner has already
-decided digital presence matters and has taken action. They are pre-sold on the
-problem. A blank listing often belongs to someone who doesn't want anything.
+**Why social-only scores the SAME as no-website (raised 32 → 40, 2026-08-06):**
+that owner has already decided digital presence matters and has taken action.
+They are pre-sold on the problem. A blank listing often belongs to someone who
+doesn't want anything.
+
+The rationale above was always written that way, but the weight scored these
+leads 20% BELOW a blank listing — the number contradicted the argument. The
+contradiction had a visible cost: the highest-review social-only record in the
+corpus (236 reviews, Instagram page only) scored gap 32 and landed in Tier B,
+while a 100-review business with no site scored 40. If the pre-sold argument is
+right, that ordering is backwards.
+
+**This is a hypothesis, not a measured result.** There is no conversion data
+behind either number. 40 encodes "a social-only owner is at least as good a
+prospect as one with nothing", which is an assertion about buyer psychology that
+this repo has never tested.
+
+**Re-derive both weights from actual close rates once 30+ calls are logged.**
+Until then every gap weight in this table is an informed guess, and the tier
+thresholds built on them inherit that uncertainty. Do not treat the numbers as
+validated because they appear in a rules file.
 
 ## Demand score
 

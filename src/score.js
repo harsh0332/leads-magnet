@@ -35,7 +35,7 @@ import { args, readCsv, writeCsv, log } from './utils.js';
 
 const BASE_GAP = {
   noWebsite: 40,
-  socialOnly: 32,
+  socialOnly: 40,
   unclaimed: 25,
   nameStuffed: 20,
   badCategory: 15,
