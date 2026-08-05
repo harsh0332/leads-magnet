@@ -1,0 +1,823 @@
+{
+  "$schema": "internal://field-map/v1",
+  "derivedOn": "2026-08-05",
+  "derivedBy": "scripts/discover-fields.js",
+  "corpus": {
+    "fixtures": 8,
+    "records": 153,
+    "distinctBusinesses": 137,
+    "perFixture": [
+      {
+        "file": "001-dentist-in-vijay-nagar-indore-initial.txt",
+        "framing": "initial",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "002-dentist-in-vijay-nagar-indore-scroll2.txt",
+        "framing": "pagination",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "003-interior-designer-in-mp-nagar-bhopal-initial.txt",
+        "framing": "initial",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "004-interior-designer-in-mp-nagar-bhopal-scroll2.txt",
+        "framing": "pagination",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "005-gym-in-rau-indore-initial.txt",
+        "framing": "initial",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "006-gym-in-rau-indore-scroll3.txt",
+        "framing": "pagination",
+        "records": 13,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "007-chartered-accountant-in-freeganj-ujjain-initial.txt",
+        "framing": "initial",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      },
+      {
+        "file": "008-chartered-accountant-in-freeganj-ujjain-scroll2.txt",
+        "framing": "pagination",
+        "records": 20,
+        "containerIndex": 64,
+        "wrapped": true
+      }
+    ]
+  },
+  "recordRoot": {
+    "containerPath": [
+      64
+    ],
+    "elementUnwrap": [
+      1
+    ],
+    "note": "Record root = payload[containerPath][i][...elementUnwrap]. All field paths below are relative to that record root."
+  },
+  "fields": {
+    "businessName": {
+      "path": [
+        11
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "Surana Dental Clinic",
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 137,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            57,
+            1
+          ],
+          "sample": "Surana Dental Clinic (Owner)"
+        },
+        {
+          "path": [
+            88,
+            3
+          ],
+          "sample": "Surana Dental Clinic"
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            57,
+            1
+          ],
+          "confidence": 1,
+          "sample": "Surana Dental Clinic (Owner)"
+        },
+        {
+          "path": [
+            88,
+            3
+          ],
+          "confidence": 1,
+          "sample": "Surana Dental Clinic"
+        },
+        {
+          "path": [
+            101
+          ],
+          "confidence": 0.9935,
+          "sample": "सुराना दंत चिकित्सा क्लिनिक"
+        }
+      ]
+    },
+    "phone": {
+      "path": [
+        178,
+        0,
+        1,
+        1,
+        0
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "+91 XXXXX XXXXX  [redacted: real number, see fixture]",
+      "confidence": 0.8105,
+      "confirmedIn": 8,
+      "nullRate": 0.1895,
+      "distinctValues": 112,
+      "coverageByFraming": {
+        "initial": {
+          "present": 65,
+          "total": 80,
+          "coverage": 0.8125
+        },
+        "pagination": {
+          "present": 59,
+          "total": 73,
+          "coverage": 0.8082
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            178,
+            0,
+            0
+          ],
+          "sample": "0XXXXX XXXXX  [redacted]"
+        },
+        {
+          "path": [
+            178,
+            0,
+            3
+          ],
+          "sample": "0XXXXXXXXXX  [redacted]"
+        },
+        {
+          "path": [
+            178,
+            0,
+            1,
+            0,
+            0
+          ],
+          "sample": "0XXXXX XXXXX  [redacted]"
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            178,
+            0,
+            0
+          ],
+          "confidence": 0.8105,
+          "sample": "0XXXXX XXXXX  [redacted]"
+        },
+        {
+          "path": [
+            178,
+            0,
+            3
+          ],
+          "confidence": 0.8105,
+          "sample": "0XXXXXXXXXX  [redacted]"
+        },
+        {
+          "path": [
+            178,
+            0,
+            1,
+            0,
+            0
+          ],
+          "confidence": 0.8105,
+          "sample": "0XXXXX XXXXX  [redacted]"
+        }
+      ],
+      "absenceIsExpected": true,
+      "note": "Many businesses genuinely have no phone. Coverage below 1.0 is a property of the businesses, not a defect in the path. Do NOT \"fix\" this by choosing a higher-coverage path — a path at 0% or 100% would be the wrong one.",
+      "sampleRedacted": true
+    },
+    "website": {
+      "path": [
+        7,
+        0
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "https://example-clinic.com/  [redacted]",
+      "confidence": 0.4118,
+      "confirmedIn": 8,
+      "nullRate": 0.5882,
+      "distinctValues": 56,
+      "coverageByFraming": {
+        "initial": {
+          "present": 32,
+          "total": 80,
+          "coverage": 0.4
+        },
+        "pagination": {
+          "present": 31,
+          "total": 73,
+          "coverage": 0.4247
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            75,
+            0,
+            0,
+            2,
+            0,
+            1,
+            2,
+            0
+          ],
+          "confidence": 0.1373,
+          "sample": "https://wa.link/ip80ya"
+        },
+        {
+          "path": [
+            75,
+            0,
+            0,
+            2,
+            0,
+            1,
+            2,
+            1,
+            0
+          ],
+          "confidence": 0.1373,
+          "sample": "https://wa.link/ip80ya"
+        },
+        {
+          "path": [
+            75,
+            0,
+            0,
+            2,
+            1,
+            1,
+            2,
+            0
+          ],
+          "confidence": 0.0196,
+          "sample": "https://www.dentalclinicindore.com/"
+        }
+      ],
+      "absenceIsExpected": true,
+      "note": "Many businesses genuinely have no website. Coverage below 1.0 is a property of the businesses, not a defect in the path. Do NOT \"fix\" this by choosing a higher-coverage path — a path at 0% or 100% would be the wrong one.",
+      "status": "LOW — verify manually",
+      "sampleRedacted": true
+    },
+    "rating": {
+      "path": [
+        4,
+        7
+      ],
+      "type": "number",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": 4.9,
+      "confidence": 0.9608,
+      "confirmedIn": 8,
+      "nullRate": 0.0392,
+      "distinctValues": 13,
+      "coverageByFraming": {
+        "initial": {
+          "present": 79,
+          "total": 80,
+          "coverage": 0.9875
+        },
+        "pagination": {
+          "present": 68,
+          "total": 73,
+          "coverage": 0.9315
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            61
+          ],
+          "confidence": 1,
+          "sample": "1"
+        },
+        {
+          "path": [
+            67
+          ],
+          "confidence": 1,
+          "sample": "1"
+        },
+        {
+          "path": [
+            25,
+            18,
+            0,
+            3
+          ],
+          "confidence": 1,
+          "sample": "1"
+        }
+      ]
+    },
+    "reviewCount": {
+      "path": [
+        4,
+        8
+      ],
+      "type": "number",
+      "derivedFrom": "fixtures/raw/002-dentist-in-vijay-nagar-indore-scroll2.txt",
+      "derivedOn": "2026-08-05",
+      "sample": 100,
+      "confidence": 0.4444,
+      "confirmedIn": 4,
+      "nullRate": 0.5556,
+      "distinctValues": 48,
+      "coverageByFraming": {
+        "initial": {
+          "present": 0,
+          "total": 80,
+          "coverage": 0
+        },
+        "pagination": {
+          "present": 68,
+          "total": 73,
+          "coverage": 0.9315
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            61
+          ],
+          "confidence": 1,
+          "sample": "1"
+        },
+        {
+          "path": [
+            67
+          ],
+          "confidence": 1,
+          "sample": "1"
+        },
+        {
+          "path": [
+            88,
+            4,
+            2
+          ],
+          "confidence": 1,
+          "sample": "607"
+        }
+      ],
+      "status": "FRAMING-DEPENDENT — absent from every \"initial\" payload, present in \"pagination\" payloads at 93.2%. The path is correct; the initial payload does not carry this field.",
+      "framingDependent": true
+    },
+    "address": {
+      "path": [
+        39
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "<street>, <locality>, Indore, Madhya Pradesh 4XXXXX  [redacted]",
+      "confidence": 0.9935,
+      "confirmedIn": 8,
+      "nullRate": 0.0065,
+      "distinctValues": 134,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 72,
+          "total": 73,
+          "coverage": 0.9863
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            183,
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "sample": "103, First Floor, Sanrachna Avenue, Above Sodani Diagnostic,"
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            183,
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "confidence": 0.9935,
+          "sample": "103, First Floor, Sanrachna Avenue, Above Sodani Diagnostic,"
+        },
+        {
+          "path": [
+            72,
+            0,
+            0,
+            17,
+            0
+          ],
+          "confidence": 0.9869,
+          "sample": "103, First Floor, Sanrachna Avenue, Above Sodani Diagnostic,"
+        },
+        {
+          "path": [
+            72,
+            0,
+            1,
+            17,
+            0
+          ],
+          "confidence": 0.9869,
+          "sample": "103, First Floor, Sanrachna Avenue, Above Sodani Diagnostic,"
+        }
+      ],
+      "sampleRedacted": true
+    },
+    "category": {
+      "path": [
+        13,
+        0
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "Dentist",
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 18,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            166
+          ],
+          "confidence": 0.9935,
+          "sample": "Indore, Madhya Pradesh"
+        },
+        {
+          "path": [
+            183,
+            1,
+            4
+          ],
+          "confidence": 0.9935,
+          "sample": "452010"
+        },
+        {
+          "path": [
+            183,
+            0,
+            3,
+            1,
+            0,
+            0
+          ],
+          "confidence": 0.9935,
+          "sample": "Indore, Madhya Pradesh"
+        }
+      ]
+    },
+    "latitude": {
+      "path": [
+        9,
+        2
+      ],
+      "type": "number",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": 22.755782099999998,
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 135,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            72,
+            0,
+            0,
+            8,
+            0,
+            2
+          ],
+          "confidence": 0.9869,
+          "sample": "22.7557401"
+        },
+        {
+          "path": [
+            72,
+            0,
+            1,
+            8,
+            0,
+            2
+          ],
+          "confidence": 0.9869,
+          "sample": "22.7557401"
+        },
+        {
+          "path": [
+            72,
+            0,
+            0,
+            21,
+            5,
+            0,
+            1,
+            0,
+            2
+          ],
+          "confidence": 0.9869,
+          "sample": "22.7557401"
+        }
+      ]
+    },
+    "longitude": {
+      "path": [
+        9,
+        3
+      ],
+      "type": "number",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": 75.8965123,
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 136,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [],
+      "runnersUp": [
+        {
+          "path": [
+            72,
+            0,
+            0,
+            8,
+            0,
+            1
+          ],
+          "confidence": 0.9869,
+          "sample": "75.8966683"
+        },
+        {
+          "path": [
+            72,
+            0,
+            1,
+            8,
+            0,
+            1
+          ],
+          "confidence": 0.9869,
+          "sample": "75.8966683"
+        },
+        {
+          "path": [
+            72,
+            0,
+            0,
+            21,
+            5,
+            0,
+            1,
+            0,
+            3
+          ],
+          "confidence": 0.9869,
+          "sample": "75.8966683"
+        }
+      ]
+    },
+    "cid": {
+      "path": [
+        10
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "0x396302af45d8f831:0x594d8a0f1d292998",
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 137,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            227,
+            0,
+            0
+          ],
+          "sample": "0x396302af45d8f831:0x594d8a0f1d292998"
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            227,
+            0,
+            0
+          ],
+          "confidence": 1,
+          "sample": "0x396302af45d8f831:0x594d8a0f1d292998"
+        },
+        {
+          "path": [
+            72,
+            0,
+            0,
+            15,
+            0,
+            0,
+            0
+          ],
+          "confidence": 0.9935,
+          "sample": "0x396302af45d8f831:0x594d8a0f1d292998"
+        },
+        {
+          "path": [
+            72,
+            0,
+            1,
+            15,
+            0,
+            0,
+            0
+          ],
+          "confidence": 0.9935,
+          "sample": "0x396302af45d8f831:0x594d8a0f1d292998"
+        }
+      ]
+    },
+    "placeId": {
+      "path": [
+        78
+      ],
+      "type": "string",
+      "derivedFrom": "fixtures/raw/001-dentist-in-vijay-nagar-indore-initial.txt",
+      "derivedOn": "2026-08-05",
+      "sample": "ChIJMfjYRa8CYzkRmCkpHQ-KTVk",
+      "confidence": 1,
+      "confirmedIn": 8,
+      "nullRate": 0,
+      "distinctValues": 137,
+      "coverageByFraming": {
+        "initial": {
+          "present": 80,
+          "total": 80,
+          "coverage": 1
+        },
+        "pagination": {
+          "present": 73,
+          "total": 73,
+          "coverage": 1
+        }
+      },
+      "equivalentPaths": [
+        {
+          "path": [
+            227,
+            0,
+            4
+          ],
+          "sample": "ChIJMfjYRa8CYzkRmCkpHQ-KTVk"
+        }
+      ],
+      "runnersUp": [
+        {
+          "path": [
+            227,
+            0,
+            4
+          ],
+          "confidence": 1,
+          "sample": "ChIJMfjYRa8CYzkRmCkpHQ-KTVk"
+        },
+        {
+          "path": [
+            209
+          ],
+          "confidence": 0.4771,
+          "sample": "Ch1kZW50aXN0IGluIFZpamF5IE5hZ2FyIEluZG9yZVofIh1kZW50aXN0IGlu"
+        },
+        {
+          "path": [
+            142,
+            1,
+            0,
+            10
+          ],
+          "confidence": 0.0588,
+          "sample": "ChZDSUhNMG9nS0VJQ0FnSUR2c2FQa2NREAE"
+        }
+      ]
+    }
+  },
+  "_privacyNote": "Sample values for phone, address and website are REDACTED. This repo is public and those fields are scraped personal/business data (CLAUDE.md deny rule). The real observed values remain in the local gitignored fixture named in each entry's derivedFrom, which is where provenance is actually verified."
+}

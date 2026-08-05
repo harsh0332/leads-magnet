@@ -1,0 +1,6 @@
+{
+  "_note": "CIDs already contacted. The scorer excludes every cid listed here, so a business you have already called never reappears on a call sheet. Add the cid (the `cid` column in leads.csv, e.g. \"0x396302af45d8f831:0x594d8a0f1d292998\") after you speak to someone. This file is the operator's memory between runs — it is the difference between a lead list and the same lead list again next month.",
+  "_format": "cids: array of cid strings. Comments live in _note keys and are ignored.",
+
+  "cids": []
+}
