@@ -31,7 +31,7 @@ the default, then proceed. Do not ask a series of questions.
 
 Echo back one line before doing anything else:
 
-> `Indore · dentist · 96 queries planned · est. 5-6 hrs · starting`
+> `Indore · dentist · 150 queries planned · est. 5-6 hrs · starting`
 
 ---
 
@@ -62,12 +62,24 @@ npm run pipeline -- --city="<city>" --category="<category>"
 
 This runs scrape → score → report and writes `output/<runId>/`.
 
-Monitor the terminal. Do **not** open the browser tool to watch it.
+Monitor the terminal. Do **not** open the browser tool to watch it, and never
+browse Maps to collect records yourself — that is the failure this architecture
+was rebuilt to eliminate.
+
+To sanity-check the pipeline before committing to a multi-hour run:
+
+```bash
+npm run pipeline -- --dry-run
+```
+
+That exercises capture → parse → score → report offline against fixtures in
+about a second.
 
 **Interrupt and report to the operator immediately if:**
-- 3 consecutive queries return 0 results (block or broken selectors)
-- A CAPTCHA appears in the log
+- 3 consecutive queries return 0 records (block, or a stale field map)
+- A CAPTCHA or block page appears in the log — stop, do not retry around it
 - The error rate exceeds 20% of attempted records
+- The null-rate table shows a mapped field over 30% `unresolvedRate`
 
 Otherwise let it finish. It takes hours. That is expected and fine.
 
@@ -89,4 +101,10 @@ Do not paste the full list into chat.
 ## Step 5 — If it failed
 
 If the run produced fewer than 50 records for a city that should obviously have
-hundreds, do not retry blindly. Run `/verify-selectors` and report what broke.
+hundreds, do not retry blindly and do not open a browser to investigate.
+
+Run `/verify-fixtures` first — it exercises the whole pipeline offline in about
+a second and will tell you whether extraction itself is broken. Only if a field
+path has genuinely stopped resolving against fresh payloads are the fixtures
+stale, and then the sequence is `probe` re-captures, `discover` re-derives the
+field map, and you re-verify. Never patch `src/parse.js` around a stale map.

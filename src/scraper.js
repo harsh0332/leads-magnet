@@ -27,7 +27,7 @@ import path from 'path';
 import { URL_TEMPLATE, FEED, DATA_ENDPOINT_MARKER } from './selectors.js';
 import { args, sleep, jitter, log } from './utils.js';
 import { parseSearchResponseDetailed } from './parse.js';
-import { buildQueries, areaFromQuery } from './query-matrix.js';
+import { buildQueries, resolveArea } from './query-matrix.js';
 import {
   resolveRunId, openRun, appendRecord, loadProgress, saveProgress,
   logError, summarize, printSummary,
@@ -60,7 +60,7 @@ const FIXTURE_DIR = path.join('fixtures', 'raw');
  * Parse one intercepted body and append every unseen record immediately.
  * Returns counts. Pure except for the CSV append, which is the point.
  */
-function ingestBody(body, { handle, query, area, seen, progress, collected }) {
+function ingestBody(body, { handle, query, city, seen, progress, collected }) {
   const { framing, records, skipped } = parseSearchResponseDetailed(body);
 
   let written = 0;
@@ -69,7 +69,13 @@ function ingestBody(body, { handle, query, area, seen, progress, collected }) {
   for (const place of records) {
     if (seen.has(place.cid)) { duplicates += 1; continue; }
     seen.add(place.cid);
-    appendRecord(handle, place, { query, area, framing });
+    // Area is derived from the business's OWN address, not from the query.
+    // Google bleeds results across locality boundaries, so the query locality
+    // is a search parameter rather than a fact about the business.
+    const { area, areaSource, queryArea } = resolveArea({
+      address: place.address, query, city,
+    });
+    appendRecord(handle, place, { query, area, areaSource, queryArea, framing });
     collected?.push(place);
     written += 1;
   }
@@ -119,7 +125,7 @@ async function runDry(handle, progress, collected) {
     try {
       const body = fs.readFileSync(path.join(FIXTURE_DIR, file), 'utf8');
       const r = ingestBody(body, {
-        handle, query, area: areaFromQuery(query, CFG.city ?? ''), seen, progress, collected,
+        handle, query, city: CFG.city ?? null, seen, progress, collected,
       });
       log(`  ${file} [${r.framing}] ${r.total} records, ${r.written} new, ${r.duplicates} dupe`);
     } catch (e) {
@@ -232,7 +238,7 @@ async function runLive(handle, progress, collected) {
           if (!r.ok) { progress.stats.errors += 1; logError(handle, query, r.err); continue; }
           try {
             const out = ingestBody(r.body, {
-              handle, query, area: areaFromQuery(query, CFG.city), seen, progress, collected,
+              handle, query, city: CFG.city ?? null, seen, progress, collected,
             });
             queryRecords += out.total;
           } catch (e) {

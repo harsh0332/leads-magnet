@@ -305,7 +305,7 @@ function mappedFieldsFromMap() {
 }
 
 export const LEAD_HEADERS = Object.freeze([
-  'tier', 'name', 'phone', 'area', 'category', 'rating', 'reviewCount',
+  'tier', 'name', 'phone', 'area', 'areaSource', 'queryArea', 'category', 'rating', 'reviewCount',
   'gapReasons', 'gapScore', 'demandScore', 'website', 'address',
   'lat', 'lng', 'cid', 'placeId',
 ]);
