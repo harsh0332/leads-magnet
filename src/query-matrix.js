@@ -21,6 +21,13 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+/** localities.json, read once per process. Not inside a hot loop. */
+let _localities = null;
+export function loadLocalities(configDir = CONFIG_DIR) {
+  if (_localities === null) _localities = readJson(path.join(configDir, 'localities.json'));
+  return _localities;
+}
+
 /**
  * @param {{ city: string, category: string, limit?: number|null,
  *           configDir?: string }} opts
@@ -74,4 +81,73 @@ export function areaFromQuery(query, city) {
   const cut = tail.toLowerCase().lastIndexOf(city.toLowerCase());
   const area = (cut > 0 ? tail.slice(0, cut) : tail).trim();
   return area || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Area resolution — derive from the ADDRESS, not the query            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Which city a query belongs to. The query tail is "<area> <City>", so the
+ * city is whichever localities.json key the tail ends with.
+ */
+export function cityFromQuery(query, localities = loadLocalities()) {
+  const tail = String(query ?? '').split(' in ').slice(1).join(' in ').trim().toLowerCase();
+  if (!tail) return null;
+  let best = null;
+  for (const key of Object.keys(localities)) {
+    if (key.startsWith('_')) continue;
+    const k = key.toLowerCase();
+    if (tail === k || tail.endsWith(` ${k}`)) {
+      if (!best || key.length > best.length) best = key;
+    }
+  }
+  return best;
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Find which locality an address actually sits in.
+ *
+ * Google bleeds results across locality boundaries — a business surfaced by the
+ * "Vijay Nagar" query frequently sits in Nipania or Mahalaxmi Nagar — so the
+ * query locality is a search parameter, not a fact about the business.
+ *
+ * Matching is deliberately strict:
+ *   - word-boundary anchored, so "Rau" does not match "Raunak Tower"
+ *   - longest match wins, so "Vijay Nagar" beats a bare "Nagar"
+ *   - scoped to one city's list, so a city name can never be returned as an area
+ *
+ * A loose matcher here is worse than no matcher: it would relabel most records
+ * with a confident, wrong locality. Returns null when nothing matches, and the
+ * caller falls back to the query with areaSource='query'.
+ */
+export function areaFromAddress(address, areas) {
+  if (typeof address !== 'string' || !address.trim()) return null;
+  if (!Array.isArray(areas) || areas.length === 0) return null;
+
+  let best = null;
+  for (const area of areas) {
+    const a = String(area).trim();
+    if (!a) continue;
+    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRe(a)}([^\\p{L}\\p{N}]|$)`, 'iu');
+    if (re.test(address) && (!best || a.length > best.length)) best = a;
+  }
+  return best;
+}
+
+/**
+ * Resolve the area for one record.
+ * @returns {{area: string|null, areaSource: 'address'|'query'|'none', queryArea: string|null}}
+ */
+export function resolveArea({ address, query, city, localities = loadLocalities() }) {
+  const resolvedCity = city || cityFromQuery(query, localities);
+  const queryArea = areaFromQuery(query, resolvedCity ?? '');
+  const areas = resolvedCity ? localities[resolvedCity] : null;
+  const fromAddress = areaFromAddress(address, areas);
+
+  if (fromAddress) return { area: fromAddress, areaSource: 'address', queryArea };
+  if (queryArea) return { area: queryArea, areaSource: 'query', queryArea };
+  return { area: null, areaSource: 'none', queryArea: null };
 }

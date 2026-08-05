@@ -88,13 +88,13 @@ export function openRun({ runId, outDir = 'output' }) {
 export const RAW_HEADERS = Object.freeze([
   'query', 'framing', 'cid', 'placeId', 'name', 'category',
   'rating', 'reviewCount', 'phone', 'website', 'hasWebsite', 'isSocialOnly',
-  'address', 'area', 'lat', 'lng',
+  'address', 'area', 'areaSource', 'queryArea', 'lat', 'lng',
   'isUnclaimed', 'hasHours', 'photoCount', 'hasPhotos',
   'permanentlyClosed', 'unmappedFields',
 ]);
 
 /** Fields whose value came from the caller, not the payload. */
-const CALLER_SUPPLIED = new Set(['query', 'framing', 'area']);
+const CALLER_SUPPLIED = new Set(['query', 'framing', 'area', 'areaSource', 'queryArea']);
 
 /**
  * Map a Place + caller context to a raw.csv row. Pure.
@@ -110,6 +110,8 @@ export function toRawRow(place, extra = {}) {
     query: extra.query ?? null,
     framing: extra.framing ?? meta.framing ?? null,
     area: extra.area ?? null,
+    areaSource: extra.areaSource ?? null,
+    queryArea: extra.queryArea ?? null,
   };
 
   for (const key of RAW_HEADERS) {

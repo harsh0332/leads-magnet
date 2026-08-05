@@ -47,10 +47,11 @@ Output `output/<runId>/` me:
 ```
 AGENTS.md                    ← agent ka main context, auto-load hota hai
 .agents/rules/               ← selector aur scoring discipline
-.agents/workflows/           ← /leads, /verify-selectors
+.agents/workflows/           ← /leads, /verify-fixtures
 config/localities.json       ← city → mohalle (120-result cap todne ke liye)
 config/categories.json       ← business type → search synonyms
-src/selectors.js             ← SAARE selectors sirf yahan
+config/field-map.json        ← payload field paths, ek hi jagah
+src/parse.js                 ← pure parsing, payload se record
 prompts/PHASES.md            ← phase-wise prompts
 ```
 
@@ -62,8 +63,11 @@ prompts/PHASES.md            ← phase-wise prompts
 
 ## Do cheezein yaad rakhna
 
-**Selectors tutenge.** Google DOM har kuch mahine me badalta hai. `/verify-selectors`
-chalao, 10 minute me theek ho jayega. Sirf `src/selectors.js` edit hoti hai.
+**Payload badal sakta hai.** Google apne response ka structure kabhi kabhi
+badalta hai. `/verify-fixtures` chalao — poora pipeline offline, 1 second me,
+browser ke bina. Agar sach me koi field path tut gaya hai to `probe` nayi
+fixtures capture karega aur `discover` field map dobara banayega. `src/` me
+kabhi bhi payload index hardcode mat karo.
 
 **Ye calling list hai, bulk messaging list nahi.** Cold WhatsApp/SMS pe TRAI DND
 aur WhatsApp Business policy lagti hai — number ban ho jayega. Call karo, baat
