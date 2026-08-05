@@ -1,319 +1,343 @@
 /**
- * Two-pass Google Maps scraper.
+ * Payload-interception scraper.
  *
- * Pass 1 — read the results feed. No clicking. Cheap.
- * Pass 2 — open detail panel ONLY for records that survive the Pass-1 filter.
+ * Google Maps returns its search results as a deeply nested array payload. We
+ * intercept that response and parse it offline against config/field-map.json.
+ * NOTHING is read from the DOM — selectors exist only to scroll the feed and
+ * dismiss consent.
  *
- * Every record is written to disk immediately. Progress is checkpointed after
- * every query so an interrupted run resumes instead of restarting.
+ * There is no detail-panel pass. Phone and website arrive in the list response,
+ * which is why a run is now one page-load per query instead of one page-load
+ * plus a click per candidate.
+ *
+ * IMPORTANT — why we must scroll even when we already have enough records:
+ * reviewCount is absent from every "initial" payload (rec[4] has length 8) and
+ * present in "pagination" payloads (length 9). Verified 0/80 vs 68/73 across
+ * the fixture corpus. A run that reads only the first response produces a
+ * constant demand score, which makes Tier A and Tier B mathematically
+ * unreachable — REVIEW.md S1-1, the exact failure this rewrite exists to kill.
+ *
+ *   npm run scrape -- --city=Indore --category=dentist
+ *   npm run scrape -- --city=Indore --category=dentist --limit=3
+ *   npm run scrape -- --dry-run          # offline, against fixtures/raw
  */
 
-import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
-import { URL_TEMPLATE, FEED, DETAIL, PATTERNS } from './selectors.js';
-import { args, sleep, jitter, log, ensureDir, appendCsv, isSocialDomain } from './utils.js';
+import { URL_TEMPLATE, FEED, DATA_ENDPOINT_MARKER } from './selectors.js';
+import { args, sleep, jitter, log } from './utils.js';
+import { parseSearchResponseDetailed } from './parse.js';
+import { buildQueries, areaFromQuery } from './query-matrix.js';
+import {
+  resolveRunId, openRun, appendRecord, loadProgress, saveProgress,
+  logError, summarize, printSummary,
+} from './run-state.js';
 
 const CFG = {
   city: args.city,
   category: args.category,
-  maxPlacesPerQuery: Number(args.maxPlaces ?? 200),
+  limit: args.limit ? Number(args.limit) : null,
+  maxPlaces: Number(args.maxPlaces ?? 200),
   maxScrolls: Number(args.maxScrolls ?? 25),
-  queryLimit: args.limit ? Number(args.limit) : null,   // for smoke tests
   headless: args.headless === 'true',
+  dryRun: args['dry-run'] === 'true' || args.dryRun === 'true',
+  runId: args.run ?? null,
+
+  // Anti-blocking budget. Do not reduce these. If a run is rate limited the
+  // fix is longer delays or fewer queries — never a proxy, never a workaround.
   actionDelay: [1500, 3500],
   queryDelay: [10000, 20000],
+  emptyStreakLimit: 3,
 };
 
-if (!CFG.city || !CFG.category) {
-  console.error('Usage: npm run scrape -- --city=Indore --category=dentist');
-  process.exit(1);
-}
+const FIXTURE_DIR = path.join('fixtures', 'raw');
 
-const runId = `${CFG.city}-${CFG.category}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
-  .toLowerCase().replace(/\s+/g, '-');
-const OUT = path.join('output', runId);
-ensureDir(OUT);
+/* ------------------------------------------------------------------ */
+/* Shared record handling                                              */
+/* ------------------------------------------------------------------ */
 
-const RAW_CSV = path.join(OUT, 'raw.csv');
-const PROGRESS = path.join(OUT, 'progress.json');
-const ERRORS = path.join(OUT, 'errors.log');
+/**
+ * Parse one intercepted body and append every unseen record immediately.
+ * Returns counts. Pure except for the CSV append, which is the point.
+ */
+function ingestBody(body, { handle, query, area, seen, progress, collected }) {
+  const { framing, records, skipped } = parseSearchResponseDetailed(body);
 
-const RAW_HEADERS = [
-  'query', 'name', 'category', 'rating', 'reviewCount', 'hasWebsite',
-  'websiteUrl', 'isSocialOnly', 'phone', 'address', 'area',
-  'hasHours', 'hasPhotos', 'isUnclaimed', 'permanentlyClosed', 'mapsUrl', 'cid',
-];
+  let written = 0;
+  let duplicates = 0;
 
-/* ---------------- query matrix ---------------- */
-
-function buildQueries() {
-  const localities = JSON.parse(fs.readFileSync('config/localities.json', 'utf8'));
-  const categories = JSON.parse(fs.readFileSync('config/categories.json', 'utf8'));
-
-  const areas = localities[CFG.city];
-  const terms = categories[CFG.category];
-
-  if (!areas) throw new Error(`City "${CFG.city}" not in config/localities.json — add it first.`);
-  if (!terms) throw new Error(`Category "${CFG.category}" not in config/categories.json — add it first.`);
-
-  const q = [];
-  for (const term of terms) {
-    for (const area of areas) q.push(`${term} in ${area} ${CFG.city}`);
+  for (const place of records) {
+    if (seen.has(place.cid)) { duplicates += 1; continue; }
+    seen.add(place.cid);
+    appendRecord(handle, place, { query, area, framing });
+    collected?.push(place);
+    written += 1;
   }
-  return CFG.queryLimit ? q.slice(0, CFG.queryLimit) : q;
+
+  progress.stats.records += records.length;
+  progress.stats.written += written;
+  progress.stats.duplicates += duplicates;
+
+  return { framing, total: records.length, written, duplicates, skipped: skipped.length };
 }
 
-/* ---------------- progress ---------------- */
+/* ------------------------------------------------------------------ */
+/* Dry run — fixtures instead of the network                           */
+/* ------------------------------------------------------------------ */
 
-function loadProgress() {
-  if (fs.existsSync(PROGRESS)) return JSON.parse(fs.readFileSync(PROGRESS, 'utf8'));
-  return { done: [], seenCids: [], stats: { scraped: 0, detailed: 0, errors: 0 } };
-}
-function saveProgress(p) {
-  fs.writeFileSync(PROGRESS, JSON.stringify(p, null, 2));
-}
-
-/* ---------------- pass 1 ---------------- */
-
-async function scrollFeed(page) {
-  const feed = page.locator(FEED.container).first();
-  if (!(await feed.count())) return 0;
-
-  let prev = -1;
-  for (let i = 0; i < CFG.maxScrolls; i++) {
-    await feed.evaluate((el) => { el.scrollTop = el.scrollHeight; });
-    await sleep(2000 + Math.random() * 800);
-
-    const count = await page.locator(FEED.card).count();
-    if (count === prev) break;          // list exhausted
-    if (count >= CFG.maxPlacesPerQuery) break;
-    prev = count;
+/**
+ * Runs the identical parse -> append -> checkpoint path against captured
+ * fixtures. No browser, no network, seconds not hours. This is the regression
+ * harness for the whole pipeline: if a change breaks extraction, --dry-run
+ * shows it without burning a live run or a quota.
+ */
+async function runDry(handle, progress, collected) {
+  if (!fs.existsSync(FIXTURE_DIR)) {
+    throw new Error(`--dry-run needs captured fixtures; ${FIXTURE_DIR} does not exist`);
   }
-  return page.locator(FEED.card).count();
-}
 
-async function extractCards(page) {
-  return page.evaluate(
-    ({ FEED, patternSrc }) => {
-      const rx = {
-        rating: new RegExp(patternSrc.rating, 'i'),
-        cid: new RegExp(patternSrc.cid),
-      };
-      const out = [];
-      const cards = document.querySelectorAll(FEED.card);
+  let files = fs.readdirSync(FIXTURE_DIR)
+    .filter((f) => f.endsWith('.txt') && !f.endsWith('.url.txt'))
+    .sort();
 
-      for (const card of cards) {
-        try {
-          const link = card.querySelector(FEED.placeLink);
-          if (!link) continue;
+  if (!files.length) throw new Error(`--dry-run found no fixtures in ${FIXTURE_DIR}`);
+  if (CFG.limit) files = files.slice(0, CFG.limit);
 
-          const text = card.innerText || '';
-          if (/^\s*(Sponsored|Ad)\b/i.test(text)) continue;   // skip paid
-
-          const name = link.getAttribute('aria-label') || '';
-          const mapsUrl = link.getAttribute('href') || '';
-
-          let rating = null, reviewCount = null;
-          const rw = card.querySelector(FEED.ratingWidget);
-          if (rw) {
-            const m = (rw.getAttribute('aria-label') || '').match(rx.rating);
-            if (m) {
-              rating = parseFloat(m[1]);
-              if (m[2]) reviewCount = parseInt(m[2].replace(/,/g, ''), 10);
-            }
-          }
-
-          const hasWebsite = !!card.querySelector(FEED.websiteBtn);
-          const cidMatch = mapsUrl.match(rx.cid);
-
-          // Category is the fragile bit: first line of the info row after name.
-          const lines = text.split('\n').map((s) => s.trim()).filter(Boolean);
-          const category = lines.find((l) => l !== name && !/^[\d.]/.test(l)) || '';
-
-          out.push({
-            name, mapsUrl, rating, reviewCount, hasWebsite, category,
-            cid: cidMatch ? cidMatch[1] : mapsUrl,
-            permanentlyClosed: /permanently closed/i.test(text),
-          });
-        } catch { /* one bad card must not kill the batch */ }
-      }
-      return out;
-    },
-    { FEED, patternSrc: { rating: PATTERNS.rating.source, cid: PATTERNS.cid.source } }
-  );
-}
-
-/* ---------------- pass 2 ---------------- */
-
-async function extractDetail(page, card) {
-  const prevName = await page.evaluate((sel) => {
-    const h = Array.from(document.querySelectorAll(sel)).find(el => el.textContent.trim());
-    return h ? h.textContent.trim() : '';
-  }, DETAIL.name);
-
-  await card.click({ timeout: 8000 });
-
-  // Wait for CONTENT change, not a fixed timeout. The panel reuses the node.
-  await page.waitForFunction(
-    ({ sel, prev }) => {
-      const h = Array.from(document.querySelectorAll(sel)).find(el => el.textContent.trim() && el.textContent.trim() !== prev);
-      return h ? h.textContent.trim() : false;
-    },
-    { sel: DETAIL.name, prev: prevName },
-    { timeout: 15000 }
-  );
-  await sleep(jitter(...CFG.actionDelay));
-
-  return page.evaluate(
-    ({ DETAIL, phoneRx, claimRx }) => {
-      const q = (s) => document.querySelector(s);
-      const body = document.body.innerText || '';
-
-      let phone = null;
-      const pb = q(DETAIL.phoneBtn);
-      if (pb) {
-        const m = (pb.getAttribute('data-item-id') || '').match(new RegExp(phoneRx));
-        phone = m ? m[1] : (pb.innerText || '').trim() || null;
-      }
-
-      const wl = q(DETAIL.websiteLink);
-
-      return {
-        detailName: (q(DETAIL.name)?.textContent || '').trim(),
-        phone,
-        websiteUrl: wl ? wl.getAttribute('href') : null,
-        address: q(DETAIL.addressBtn)?.getAttribute('aria-label')?.replace(/^Address:\s*/i, '') || null,
-        hasHours: !!q(DETAIL.hoursBtn),
-        hasPhotos: !!q(DETAIL.photoButton),
-        isUnclaimed: new RegExp(claimRx, 'i').test(body) || !!q(DETAIL.claimLink),
-        permanentlyClosed: /permanently closed/i.test(body),
-      };
-    },
-    {
-      DETAIL,
-      phoneRx: PATTERNS.phoneFromAttr.source,
-      claimRx: DETAIL.claimTextPattern.source,
-    }
-  );
-}
-
-/* ---------------- main ---------------- */
-
-async function main() {
-  const queries = buildQueries();
-  const progress = loadProgress();
   const seen = new Set(progress.seenCids);
+  log(`DRY RUN — ${files.length} fixtures, no browser, no network`);
 
-  log(`Run ${runId}`);
-  log(`${queries.length} queries planned · ${progress.done.length} already done`);
+  for (const file of files) {
+    // The fixture's own captured URL is the honest "query" for this row.
+    const sidecar = path.join(FIXTURE_DIR, file.replace(/\.txt$/, '.url.txt'));
+    const query = fs.existsSync(sidecar)
+      ? decodeURIComponent((fs.readFileSync(sidecar, 'utf8').match(/[?&]q=([^&]+)/) ?? [, file])[1] || file)
+          .replace(/\+/g, ' ')
+      : file;
 
-  const browser = await chromium.launch({ headless: CFG.headless });
-  const ctx = await browser.newContext({
-    locale: 'en-IN',
-    viewport: { width: 1440, height: 900 },
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-  });
-  const page = await ctx.newPage();
-
-  let emptyStreak = 0;
-
-  for (const query of queries) {
-    if (progress.done.includes(query)) continue;
+    if (progress.done.includes(file)) { log(`  skip (done) ${file}`); continue; }
 
     try {
-      await page.goto(URL_TEMPLATE(query), { waitUntil: 'domcontentloaded', timeout: 45000 });
+      const body = fs.readFileSync(path.join(FIXTURE_DIR, file), 'utf8');
+      const r = ingestBody(body, {
+        handle, query, area: areaFromQuery(query, CFG.city ?? ''), seen, progress, collected,
+      });
+      log(`  ${file} [${r.framing}] ${r.total} records, ${r.written} new, ${r.duplicates} dupe`);
+    } catch (e) {
+      progress.stats.errors += 1;
+      logError(handle, file, e);
+      log(`  ✗ ${file} — ${e.message}`);
+    }
 
-      const consent = page.locator(FEED.consentAccept).first();
-      if (await consent.count()) { await consent.click().catch(() => {}); await sleep(1500); }
+    progress.done.push(file);
+    progress.seenCids = [...seen];
+    progress.stats.queries += 1;
+    saveProgress(handle, progress);
+  }
+}
 
-      await page.waitForSelector(FEED.container, { timeout: 20000 }).catch(() => {});
-      const found = await scrollFeed(page);
+/* ------------------------------------------------------------------ */
+/* Live run                                                            */
+/* ------------------------------------------------------------------ */
 
-      if (!found) {
-        emptyStreak++;
-        log(`  ⚠ 0 results — ${query}`);
-        if (emptyStreak >= 3) {
-          await page.screenshot({ path: path.join(OUT, 'block-evidence.png') });
-          throw new Error(
-            'Three consecutive empty queries. Likely soft-blocked or selectors broke. ' +
-            'Stopping. See block-evidence.png and run /verify-selectors.'
-          );
+/**
+ * Scroll the feed, collecting intercepted payloads.
+ *
+ * `el.scrollTop = el.scrollHeight` is a SILENT NO-OP after the first call —
+ * assigning a value the property already holds fires no scroll event, so
+ * scrolls 2..N do nothing and no pagination request is made. Measured in
+ * Phase 1. The nudge upward before each scroll is what makes the assignment a
+ * real change.
+ */
+async function scrollAndCollect(page, bodies) {
+  const feed = page.locator(FEED.container).first();
+  if (!(await feed.count())) return;
+
+  let lastCount = -1;
+  let idle = 0;
+
+  for (let i = 0; i < CFG.maxScrolls; i += 1) {
+    await feed.evaluate((el) => {
+      el.scrollTop = Math.max(0, el.scrollTop - 600);
+      el.scrollTop = el.scrollHeight;
+    }).catch(() => {});
+
+    await sleep(jitter(...CFG.actionDelay));
+
+    if (bodies.length === lastCount) {
+      idle += 1;
+      // Two consecutive scrolls with no new payload means the list is
+      // exhausted. One is not enough — a slow batch looks identical.
+      if (idle >= 2) break;
+    } else {
+      idle = 0;
+      lastCount = bodies.length;
+    }
+  }
+}
+
+async function runLive(handle, progress, collected) {
+  const { chromium } = await import('playwright');
+
+  const queries = buildQueries({
+    city: CFG.city, category: CFG.category, limit: CFG.limit,
+  });
+
+  const seen = new Set(progress.seenCids);
+  log(`${queries.length} queries planned · ${progress.done.length} already done`);
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: CFG.headless });
+    const ctx = await browser.newContext({
+      locale: 'en-IN',
+      viewport: { width: 1440, height: 900 },
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+        '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    });
+    const page = await ctx.newPage();
+
+    let emptyStreak = 0;
+
+    for (const query of queries) {
+      if (progress.done.includes(query)) continue;
+
+      const bodies = [];
+      // Listener registered BEFORE navigation — the initial payload lands
+      // ~2s into load and a listener attached afterwards misses it entirely.
+      const onResponse = (res) => {
+        if (!res.url().includes(DATA_ENDPOINT_MARKER)) return;
+        bodies.push(
+          res.text().then((t) => ({ ok: true, body: t })).catch((e) => ({ ok: false, err: e }))
+        );
+      };
+      page.on('response', onResponse);
+
+      try {
+        await page.goto(URL_TEMPLATE(query), { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+        const consent = page.locator(FEED.consentAccept).first();
+        if (await consent.count()) {
+          await consent.click().catch(() => {});
+          await sleep(jitter(...CFG.actionDelay));
         }
-        progress.done.push(query);
-        saveProgress(progress);
-        await sleep(jitter(...CFG.queryDelay));
-        continue;
-      }
-      emptyStreak = 0;
 
-      const cards = await extractCards(page);
-      const fresh = cards.filter((c) => c.cid && !seen.has(c.cid));
-      fresh.forEach((c) => seen.add(c.cid));
+        await page.waitForSelector(FEED.container, { timeout: 20000 }).catch(() => {});
+        await scrollAndCollect(page, bodies);
 
-      log(`  ${query} → ${cards.length} cards, ${fresh.length} new`);
+        const settled = await Promise.all(bodies);
+        let queryRecords = 0;
 
-      // PASS 2 — only the ones worth a click.
-      const needDetail = fresh.filter((c) => !c.hasWebsite && !c.permanentlyClosed);
-
-      for (const rec of fresh) {
-        let detail = {};
-        if (needDetail.includes(rec)) {
+        for (const r of settled) {
+          if (!r.ok) { progress.stats.errors += 1; logError(handle, query, r.err); continue; }
           try {
-            const card = page.locator(FEED.card)
-              .filter({ has: page.locator(`a[href="${rec.mapsUrl}"]`) }).first();
-            if (await card.count()) {
-              detail = await extractDetail(page, card);
-              progress.stats.detailed++;
-            }
+            const out = ingestBody(r.body, {
+              handle, query, area: areaFromQuery(query, CFG.city), seen, progress, collected,
+            });
+            queryRecords += out.total;
           } catch (e) {
-            progress.stats.errors++;
-            fs.appendFileSync(ERRORS, `[detail] ${rec.mapsUrl} :: ${e.message}\n`);
+            progress.stats.errors += 1;
+            logError(handle, query, e);
           }
         }
 
-        const website = detail.websiteUrl ?? null;
-        appendCsv(RAW_CSV, RAW_HEADERS, {
-          query,
-          name: detail.detailName || rec.name,
-          category: rec.category,
-          rating: rec.rating,
-          reviewCount: rec.reviewCount,
-          hasWebsite: rec.hasWebsite,
-          websiteUrl: website,
-          isSocialOnly: website ? isSocialDomain(website) : false,
-          phone: detail.phone ?? null,
-          address: detail.address ?? null,
-          area: query.split(' in ')[1] ?? '',
-          hasHours: detail.hasHours ?? null,
-          hasPhotos: detail.hasPhotos ?? null,
-          isUnclaimed: detail.isUnclaimed ?? null,
-          permanentlyClosed: rec.permanentlyClosed || detail.permanentlyClosed || false,
-          mapsUrl: rec.mapsUrl,
-          cid: rec.cid,
-        });
-        progress.stats.scraped++;
+        if (queryRecords === 0) {
+          emptyStreak += 1;
+          progress.stats.emptyQueries += 1;
+          log(`  ⚠ 0 records — ${query} (streak ${emptyStreak})`);
+          if (emptyStreak >= CFG.emptyStreakLimit) {
+            await page.screenshot({ path: handle.blockEvidence, fullPage: true }).catch(() => {});
+            throw new Error(
+              `${CFG.emptyStreakLimit} consecutive queries returned zero records. ` +
+              'Likely soft-blocked, or the payload shape changed. Stopping — not retrying. ' +
+              `See ${handle.blockEvidence}. If it shows a normal results page, the field ` +
+              'map is stale: re-capture fixtures and re-run discovery.'
+            );
+          }
+        } else {
+          emptyStreak = 0;
+          log(`  ${query} → ${queryRecords} records, ${progress.stats.written} written so far`);
+        }
+      } catch (e) {
+        if (/consecutive queries returned zero/.test(e.message)) {
+          logError(handle, query, e);
+          log(`\n✗ ${e.message}`);
+          progress.done.push(query);
+          progress.seenCids = [...seen];
+          saveProgress(handle, progress);
+          break;
+        }
+        progress.stats.errors += 1;
+        logError(handle, query, e);
+        log(`  ✗ ${query} — ${e.message}`);
+      } finally {
+        page.off('response', onResponse);
       }
 
       progress.done.push(query);
       progress.seenCids = [...seen];
-      saveProgress(progress);
+      progress.stats.queries += 1;
+      saveProgress(handle, progress);
 
       await sleep(jitter(...CFG.queryDelay));
-    } catch (e) {
-      fs.appendFileSync(ERRORS, `[query] ${query} :: ${e.message}\n`);
-      if (/consecutive empty/.test(e.message)) { log(`\n✗ ${e.message}`); break; }
-      progress.stats.errors++;
-      log(`  ✗ ${query} — ${e.message}`);
     }
+  } finally {
+    // Closed on the error path too, not just the success path. The previous
+    // implementation left chromium alive and the process never exited.
+    if (browser) await browser.close().catch(() => {});
   }
-
-  await browser.close();
-  log(`\nDone. ${progress.stats.scraped} records → ${RAW_CSV}`);
-  log(`Detail pass: ${progress.stats.detailed} · Errors: ${progress.stats.errors}`);
-  log(`Next: npm run score -- --run=${runId}`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+/* ------------------------------------------------------------------ */
+/* Entry                                                               */
+/* ------------------------------------------------------------------ */
+
+async function main() {
+  if (!CFG.dryRun && (!CFG.city || !CFG.category)) {
+    console.error('Usage: npm run scrape -- --city=Indore --category=dentist [--limit=N]');
+    console.error('       npm run scrape -- --dry-run   (offline, against fixtures/raw)');
+    process.exit(1);
+  }
+
+  const runId = CFG.runId ?? resolveRunId({
+    city: CFG.city ?? 'fixtures',
+    category: CFG.category ?? 'dryrun',
+    now: new Date(),
+  });
+
+  const handle = openRun({ runId });
+  const progress = loadProgress(handle);
+
+  log(`Run ${runId}${CFG.dryRun ? ' (dry run)' : ''}`);
+
+  const collected = [];
+  if (CFG.dryRun) await runDry(handle, progress, collected);
+  else await runLive(handle, progress, collected);
+
+  saveProgress(handle, progress);
+
+  // CLAUDE.md: every run prints a per-field null-rate table, and a field at
+  // 100% null or a numeric field with zero variance fails the run.
+  const summary = summarize(collected);
+  const healthy = printSummary(summary);
+
+  log('');
+  log(`Records written: ${progress.stats.written} (${progress.stats.duplicates} duplicates skipped)`);
+  log(`Queries: ${progress.stats.queries} · Errors: ${progress.stats.errors}`);
+  log(`raw.csv → ${handle.rawCsv}`);
+  log(`Next: npm run score -- --run=${runId}`);
+
+  if (!healthy) {
+    throw new Error(
+      'Null-rate check FAILED (see table above). A field over 30% unresolved, or a ' +
+      'numeric field with zero variance, means extraction is broken — not that the ' +
+      'data is like that. Fix the field map before trusting this run.'
+    );
+  }
+
+  return runId;
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((e) => { console.error(`\n${e.stack ?? e.message}`); process.exit(1); });
